@@ -11,6 +11,9 @@ export async function POST(req: NextRequest) {
     const signatureHeader = req.headers.get('x-circle-signature');
     const keyIdHeader = req.headers.get('x-circle-key-id');
 
+    console.log('[DEBUG WEBHOOK] Incoming Request Received!');
+    console.log('[DEBUG WEBHOOK] KeyId:', keyIdHeader);
+
     // 2. Cryptographic signature verification (v2 ECDSA SHA-256)
     const verification = await verifyCircleWebhookSignature({
       rawRequestBody,
@@ -25,14 +28,21 @@ export async function POST(req: NextRequest) {
 
     // 3. Parse JSON payload
     const payload = JSON.parse(rawRequestBody);
-    const notificationType = payload.notificationType;
+    const notificationType = payload.notificationType || '';
 
-    // Accept Circle notification types: 'transfers', 'transactions', 'inboundTransfers', 'settlements'
-    const validNotificationTypes = ['transfers', 'transactions', 'inboundTransfers', 'settlements'];
-    const isMatchingType = !notificationType || validNotificationTypes.includes(notificationType);
+    console.log('[DEBUG WEBHOOK] notificationType:', notificationType);
+
+    // Accept Circle notification types: "transactions.inbound", "transactions.outbound", etc.
+    const isMatchingType =
+      !notificationType ||
+      notificationType.startsWith('transactions.') ||
+      notificationType.includes('inbound') ||
+      notificationType.includes('transfer') ||
+      notificationType === 'contracts.eventLog' ||
+      notificationType.startsWith('modularWallet.');
 
     if (isMatchingType) {
-      const eventData = payload.event || payload.notification || payload;
+      const eventData = payload.notification || payload.event || payload;
       const transferState = (eventData.state || eventData.status || 'COMPLETE').toUpperCase();
       const destinationAddress = (
         eventData.destinationAddress ||
@@ -46,6 +56,11 @@ export async function POST(req: NextRequest) {
       const transferAmountStr = String(amounts[0] || '0');
       const transferAmount = parseFloat(transferAmountStr);
       const txHash = eventData.txHash || eventData.transactionHash || eventData.id || `0x-webhook-${Date.now()}`;
+
+      console.log('[DEBUG WEBHOOK] Matched payload fields:');
+      console.log('   walletId:', walletId);
+      console.log('   destinationAddress:', destinationAddress);
+      console.log('   transferAmountStr:', transferAmountStr);
 
       if ((transferState === 'COMPLETE' || transferState === 'SUCCESS' || transferState === 'CONFIRMED')) {
         // Find matching custodial wallet in DB by address OR by circleWalletId
@@ -68,6 +83,7 @@ export async function POST(req: NextRequest) {
         });
 
         if (wallet && wallet.user && wallet.user.workflows.length > 0) {
+          console.log(`[DEBUG WEBHOOK] Found Wallet in DB! Address: ${wallet.address} | Workflows: ${wallet.user.workflows.length}`);
           let triggeredCount = 0;
 
           for (const workflow of wallet.user.workflows) {
@@ -81,6 +97,8 @@ export async function POST(req: NextRequest) {
                 : Infinity;
 
               if (transferAmount >= minAmount && transferAmount <= maxAmount) {
+                console.log(`[DEBUG WEBHOOK] Triggering Workflow ID: ${workflow.id}`);
+
                 // 1. Send event to Inngest for logging/durability tracking (non-blocking)
                 try {
                   await inngest.send({
