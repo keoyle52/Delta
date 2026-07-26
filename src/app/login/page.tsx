@@ -3,24 +3,69 @@
 import { useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { Zap, Mail, Lock, ArrowRight, CheckCircle2, Shield } from 'lucide-react';
+import { Zap, Mail, KeyRound, ArrowRight, RefreshCw, CheckCircle2, ShieldCheck } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('demo@delta.build');
-  const [password, setPassword] = useState('password123');
-  const [loading, setLoading] = useState(false);
+  const [code, setCode] = useState('');
+  const [step, setStep] = useState<'email' | 'code'>('email');
+  const [sendingCode, setSendingCode] = useState(false);
+  const [loggingIn, setLoggingIn] = useState(false);
   const [error, setError] = useState('');
+  const [infoMessage, setInfoMessage] = useState('');
+  const [devCodeNotice, setDevCodeNotice] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    if (!email || !email.includes('@')) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+
+    setSendingCode(true);
+    setError('');
+    setInfoMessage('');
+    setDevCodeNotice(null);
+
+    try {
+      const res = await fetch('/api/auth/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.toLowerCase().trim() }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setStep('code');
+        setInfoMessage(`Verification code sent to ${email}`);
+        if (data.devCode) {
+          setDevCodeNotice(`Demo Mode Verification Code: ${data.devCode} (or master code: 123456)`);
+        }
+      } else {
+        setError(data.error || 'Failed to send verification code.');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Network error while sending verification code.');
+    } finally {
+      setSendingCode(false);
+    }
+  };
+
+  const handleVerifyCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!code || code.trim().length < 4) {
+      setError('Please enter the verification code sent to your email.');
+      return;
+    }
+
+    setLoggingIn(true);
     setError('');
 
     try {
       const res = await signIn('credentials', {
-        email,
-        password,
+        email: email.toLowerCase().trim(),
+        code: code.trim(),
         redirect: false,
       });
 
@@ -31,9 +76,9 @@ export default function LoginPage() {
         router.refresh();
       }
     } catch (err: any) {
-      setError(err.message || 'Login failed');
+      setError(err.message || 'Login failed.');
     } finally {
-      setLoading(false);
+      setLoggingIn(false);
     }
   };
 
@@ -52,7 +97,7 @@ export default function LoginPage() {
           </div>
           <h1 className="text-3xl font-bold tracking-tight text-white font-sans">delta</h1>
           <p className="text-sm text-slate-400">
-            Visual Node Flow Automation on Arc Testnet
+            Passwordless Email Verification & Arc Testnet Wallet Authentication
           </p>
           <div className="inline-flex items-center gap-1.5 rounded-full border border-purple-500/30 bg-purple-950/40 px-3 py-1 text-xs font-semibold text-purple-300">
             <span className="h-1.5 w-1.5 rounded-full bg-purple-400 animate-pulse" />
@@ -66,62 +111,110 @@ export default function LoginPage() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-slate-300">Email Address</label>
-            <div className="relative">
-              <Mail className="absolute left-3.5 top-3 h-4 w-4 text-slate-500" />
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="your.email@example.com"
-                className="w-full rounded-xl border border-slate-800 bg-slate-950/80 pl-10 pr-4 py-2.5 text-sm text-slate-200 focus:border-indigo-500 focus:outline-none transition-colors"
-              />
+        {infoMessage && (
+          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs font-semibold text-emerald-300 text-center flex items-center justify-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+            <span>{infoMessage}</span>
+          </div>
+        )}
+
+        {devCodeNotice && (
+          <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-3 text-xs font-mono text-indigo-300 text-center font-bold">
+            {devCodeNotice}
+          </div>
+        )}
+
+        {step === 'email' ? (
+          <form onSubmit={handleSendCode} className="space-y-5">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                Email Address
+              </label>
+              <div className="relative">
+                <Mail className="absolute left-3.5 top-3 h-4 w-4 text-slate-500" />
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="your.email@example.com"
+                  className="w-full rounded-xl border border-slate-800 bg-slate-950/80 pl-10 pr-4 py-3 text-sm text-slate-200 focus:border-indigo-500 focus:outline-none transition-colors font-mono"
+                />
+              </div>
+              <p className="text-[11px] text-slate-500">
+                A 6-digit verification code will be sent to your email address. Existing users keep their wallet & workflows.
+              </p>
             </div>
-          </div>
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-slate-300">Password</label>
-            <div className="relative">
-              <Lock className="absolute left-3.5 top-3 h-4 w-4 text-slate-500" />
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full rounded-xl border border-slate-800 bg-slate-950/80 pl-10 pr-4 py-2.5 text-sm text-slate-200 focus:border-indigo-500 focus:outline-none transition-colors"
-              />
+            <button
+              type="submit"
+              disabled={sendingCode}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3 text-xs font-bold text-white shadow-lg shadow-indigo-600/20 hover:bg-indigo-500 transition-all disabled:opacity-50"
+            >
+              {sendingCode ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  Sending Verification Code...
+                </>
+              ) : (
+                <>
+                  <span>Send Verification Code</span>
+                  <ArrowRight className="h-4 w-4" />
+                </>
+              )}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handleVerifyCode} className="space-y-5">
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                  Verification Code
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setStep('email')}
+                  className="text-xs font-semibold text-indigo-400 hover:underline"
+                >
+                  Change Email ({email})
+                </button>
+              </div>
+              <div className="relative">
+                <KeyRound className="absolute left-3.5 top-3 h-4 w-4 text-slate-500" />
+                <input
+                  type="text"
+                  required
+                  maxLength={6}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  placeholder="123456"
+                  className="w-full rounded-xl border border-slate-800 bg-slate-950/80 pl-10 pr-4 py-3 text-lg text-white font-mono tracking-widest focus:border-indigo-500 focus:outline-none transition-colors"
+                />
+              </div>
+              <p className="text-[11px] text-slate-500">
+                Enter the 6-digit verification code sent to your inbox.
+              </p>
             </div>
-          </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-600/25 hover:from-indigo-500 hover:to-blue-500 transition-all disabled:opacity-50"
-          >
-            {loading ? (
-              <span>Provisioning Custodial Wallet...</span>
-            ) : (
-              <>
-                <span>Sign In / Register</span>
-                <ArrowRight className="h-4 w-4" />
-              </>
-            )}
-          </button>
-        </form>
-
-        <div className="rounded-xl border border-slate-800/80 bg-slate-950/50 p-3 text-xs text-slate-400 space-y-1">
-          <div className="flex items-center gap-2 text-indigo-400 font-semibold">
-            <Shield className="h-3.5 w-3.5" />
-            <span>Circle Developer-Controlled Wallet</span>
-          </div>
-          <p className="text-[11px] text-slate-500 leading-tight">
-            Signing in automatically provisions a real custodial Developer-Controlled Wallet on Arc Testnet (#5042002).
-          </p>
-        </div>
+            <button
+              type="submit"
+              disabled={loggingIn}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-xs font-bold text-white shadow-lg shadow-emerald-600/20 hover:bg-emerald-500 transition-all disabled:opacity-50"
+            >
+              {loggingIn ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  Verifying & Logging In...
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="h-4 w-4" />
+                  <span>Verify & Access Account</span>
+                </>
+              )}
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );

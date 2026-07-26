@@ -1,7 +1,6 @@
 import { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { prisma } from '@/lib/prisma';
-import bcrypt from 'bcryptjs';
 import { createArcUserWallet } from '@/lib/circle/wallets';
 
 /**
@@ -33,40 +32,52 @@ export async function getOrCreateUserWallet(userId: string) {
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
-      name: 'Credentials',
+      name: 'Email Verification Code',
       credentials: {
         email: { label: 'Email', type: 'email' },
-        password: { label: 'Password', type: 'password' },
+        code: { label: 'Verification Code', type: 'text' },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
-          throw new Error('Email and password are required.');
+        if (!credentials?.email || !credentials?.code) {
+          throw new Error('Email and verification code are required.');
         }
 
         const email = credentials.email.toLowerCase().trim();
+        const inputCode = credentials.code.trim();
 
-        // 1. Find user in database
+        // 1. Verify code in database or accept master demo code '123456'
+        const storedCodeRecord = await prisma.verificationCode.findUnique({
+          where: { email },
+        });
+
+        const isMasterCode = inputCode === '123456';
+        const isValidCode =
+          isMasterCode ||
+          (storedCodeRecord &&
+            storedCodeRecord.code === inputCode &&
+            storedCodeRecord.expiresAt > new Date());
+
+        if (!isValidCode) {
+          throw new Error('Invalid or expired verification code. Please request a new code.');
+        }
+
+        // Clean up used code
+        if (storedCodeRecord) {
+          await prisma.verificationCode.delete({ where: { email } }).catch(() => {});
+        }
+
+        // 2. Find existing user OR auto-register new user
         let user = await prisma.user.findUnique({
           where: { email },
         });
 
-        // 2. Auto-register user if not present (Demo Mode)
         if (!user) {
-          const hashedPassword = await bcrypt.hash(credentials.password, 10);
           user = await prisma.user.create({
-            data: {
-              email,
-              password: hashedPassword,
-            },
+            data: { email },
           });
-        } else {
-          const isValidPassword = await bcrypt.compare(credentials.password, user.password || '');
-          if (!isValidPassword) {
-            throw new Error('Invalid credentials provided.');
-          }
         }
 
-        // 3. Provision / link Circle custodial wallet on Arc Testnet
+        // 3. Provision / link Circle custodial wallet on Arc Testnet idempotently
         let userWallet: any = null;
         try {
           userWallet = await getOrCreateUserWallet(user.id);
