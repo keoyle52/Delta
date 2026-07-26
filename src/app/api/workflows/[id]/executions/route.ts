@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { inngest } from '@/lib/inngest/client';
 import { executeAppKitSwap, executeAppKitBridge, executeAppKitSend } from '@/lib/circle/app-kit';
 import { getWalletBalances } from '@/lib/arc/rpc';
+import { sendExecutionNotificationEmail } from '@/lib/email';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -53,6 +54,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const { id } = await params;
     const userId = (session.user as any).id;
+    const userEmail = session.user.email || '';
     const body = await req.json().catch(() => ({}));
     let testAmount = body.amount || '20.00';
 
@@ -114,6 +116,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       triggerAmount: testAmount,
       walletAddress,
       walletId: userWithWallet.wallet.circleWalletId,
+      userEmail,
     }).catch((err) => console.error('Direct manual workflow execution error:', err));
 
     return NextResponse.json({
@@ -160,12 +163,14 @@ async function executeWorkflowDirectly({
   triggerAmount,
   walletAddress,
   walletId,
+  userEmail,
 }: {
   workflowId: string;
   triggerTxHash: string;
   triggerAmount: string;
   walletAddress: string;
   walletId: string;
+  userEmail?: string;
 }) {
   const execution = await prisma.execution.create({
     data: {
@@ -207,7 +212,7 @@ async function executeWorkflowDirectly({
 
   await updateExecutionLogs();
 
-  // FIX B: Transitive graph traversal (BFS) to execute all chained downstream nodes
+  // Transitive graph traversal (BFS) to execute all chained downstream nodes
   const actionNodes = getReachableActionNodes(triggerNode.id, nodes, edges);
   const totalAmount = parseFloat(triggerAmount);
 
@@ -285,6 +290,15 @@ async function executeWorkflowDirectly({
           details: `Retained ${percentage}% (${actionAmount} USDC) safely in user wallet on Arc Testnet`,
           timestamp: new Date().toISOString(),
         });
+      } else if (node.type === 'notify') {
+        stepLogs.push({
+          stepId: node.id,
+          nodeType: 'notify',
+          nodeName: node.data?.label || 'Log Notification',
+          status: 'COMPLETE',
+          details: `Email notification triggered for ${node.data?.template || workflow.name}`,
+          timestamp: new Date().toISOString(),
+        });
       }
     } catch (err: any) {
       stepLogs.push({
@@ -301,12 +315,29 @@ async function executeWorkflowDirectly({
   }
 
   const hasFailed = stepLogs.some((s) => s.status === 'FAILED');
+  const finalStatus = hasFailed ? 'FAILED' : 'COMPLETE';
+
   await prisma.execution.update({
     where: { id: execution.id },
     data: {
-      status: hasFailed ? 'FAILED' : 'COMPLETE',
+      status: finalStatus,
       finishedAt: new Date(),
       stepLogs: stepLogs as any,
     },
   });
+
+  // Send Resend Execution Alert Email to user
+  if (userEmail) {
+    try {
+      await sendExecutionNotificationEmail({
+        to: userEmail,
+        workflowName: workflow.name,
+        status: finalStatus,
+        triggerAmount,
+        stepLogs,
+      });
+    } catch (emailErr: any) {
+      console.warn('Resend notification dispatch notice:', emailErr.message);
+    }
+  }
 }

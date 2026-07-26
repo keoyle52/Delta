@@ -3,6 +3,7 @@ import { verifyCircleWebhookSignature } from '@/lib/circle/webhook';
 import { prisma } from '@/lib/prisma';
 import { inngest } from '@/lib/inngest/client';
 import { executeAppKitSwap, executeAppKitBridge, executeAppKitSend } from '@/lib/circle/app-kit';
+import { sendExecutionNotificationEmail } from '@/lib/email';
 
 export async function POST(req: NextRequest) {
   try {
@@ -179,7 +180,7 @@ function getReachableActionNodes(triggerNodeId: string, nodes: any[], edges: any
 }
 
 /**
- * Direct workflow execution runner with resilient step-by-step isolation and BFS chained node execution
+ * Direct workflow execution runner with resilient step-by-step isolation, BFS chained node execution, and Resend email alerts
  */
 async function executeWorkflowDirectly({
   workflowId,
@@ -234,7 +235,7 @@ async function executeWorkflowDirectly({
 
   await updateExecutionLogs();
 
-  // FIX B: Transitive graph traversal (BFS) to execute all chained downstream nodes
+  // Transitive graph traversal (BFS) to execute all chained downstream nodes
   const actionNodes = getReachableActionNodes(triggerNode.id, nodes, edges);
   const totalAmount = parseFloat(triggerAmount);
 
@@ -312,6 +313,15 @@ async function executeWorkflowDirectly({
           details: `Retained ${percentage}% (${actionAmount} USDC) safely in user wallet on Arc Testnet`,
           timestamp: new Date().toISOString(),
         });
+      } else if (node.type === 'notify') {
+        stepLogs.push({
+          stepId: node.id,
+          nodeType: 'notify',
+          nodeName: node.data?.label || 'Log Notification',
+          status: 'COMPLETE',
+          details: `Email notification triggered for ${node.data?.template || workflow.name}`,
+          timestamp: new Date().toISOString(),
+        });
       }
     } catch (err: any) {
       stepLogs.push({
@@ -328,12 +338,33 @@ async function executeWorkflowDirectly({
   }
 
   const hasFailed = stepLogs.some((s) => s.status === 'FAILED');
+  const finalStatus = hasFailed ? 'FAILED' : 'COMPLETE';
+
   await prisma.execution.update({
     where: { id: execution.id },
     data: {
-      status: hasFailed ? 'FAILED' : 'COMPLETE',
+      status: finalStatus,
       finishedAt: new Date(),
       stepLogs: stepLogs as any,
     },
   });
+
+  // Send Resend Execution Alert Email to user
+  try {
+    const user = await prisma.user.findFirst({
+      where: { workflows: { some: { id: workflowId } } },
+    });
+
+    if (user && user.email) {
+      await sendExecutionNotificationEmail({
+        to: user.email,
+        workflowName: workflow.name,
+        status: finalStatus,
+        triggerAmount,
+        stepLogs,
+      });
+    }
+  } catch (emailErr: any) {
+    console.warn('Resend notification dispatch notice:', emailErr.message);
+  }
 }
