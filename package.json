@@ -1,0 +1,52 @@
+{
+  "name": "delta",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "lint": "next lint",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "db:generate": "prisma generate",
+    "setup:wallet-set": "npx tsx scripts/create-wallet-set.ts",
+    "inngest:dev": "npx inngest-cli@latest dev"
+  },
+  "dependencies": {
+    "@circle-fin/adapter-circle-wallets": "^1.4.3",
+    "@circle-fin/adapter-solana": "^1.6.3",
+    "@circle-fin/adapter-viem-v2": "^1.14.0",
+    "@circle-fin/app-kit": "^1.10.0",
+    "@circle-fin/bridge-kit": "^1.12.1",
+    "@circle-fin/developer-controlled-wallets": "^10.8.0",
+    "@prisma/client": "^5.22.0",
+    "@xyflow/react": "^12.3.6",
+    "axios": "^1.7.7",
+    "bcryptjs": "^2.4.3",
+    "clsx": "^2.1.1",
+    "inngest": "^3.26.0",
+    "lucide-react": "^0.460.0",
+    "next": "15.0.3",
+    "next-auth": "^4.24.10",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwind-merge": "^2.5.4",
+    "tailwindcss-animate": "^1.0.7",
+    "viem": "^2.21.50"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20.17.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "autoprefixer": "^10.4.20",
+    "dotenv": "^16.4.5",
+    "isomorphic-git": "^1.40.0",
+    "postcss": "^8.4.47",
+    "prisma": "^5.22.0",
+    "tailwindcss": "^3.4.14",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

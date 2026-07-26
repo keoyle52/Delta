@@ -1,0 +1,53 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  password  String?
+  createdAt DateTime   @default(now())
+  wallet    Wallet?
+  workflows Workflow[]
+}
+
+model Wallet {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  circleWalletId    String   @unique
+  circleWalletSetId String
+  address           String   @unique
+  blockchain        String   @default("ARC-TESTNET")
+  createdAt         DateTime @default(now())
+}
+
+model Workflow {
+  id         String      @id @default(cuid())
+  userId     String
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  isActive   Boolean     @default(true)
+  nodes      Json        // React Flow nodes JSON array
+  edges      Json        // React Flow edges JSON array
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  executions Execution[]
+}
+
+model Execution {
+  id            String    @id @default(cuid())
+  workflowId    String
+  workflow      Workflow  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  triggerTxHash String
+  triggerAmount String    // USDC amount string for precision
+  status        String    // PENDING | RUNNING | COMPLETE | FAILED
+  stepLogs      Json      // Array of step logs JSON
+  startedAt     DateTime  @default(now())
+  finishedAt    DateTime?
+}
