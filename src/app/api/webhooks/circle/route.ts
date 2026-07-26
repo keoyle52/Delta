@@ -10,11 +10,6 @@ export async function POST(req: NextRequest) {
     const signatureHeader = req.headers.get('x-circle-signature');
     const keyIdHeader = req.headers.get('x-circle-key-id');
 
-    console.log('\n===========================================================');
-    console.log('[DEBUG WEBHOOK] Incoming Request Received!');
-    console.log('[DEBUG WEBHOOK] X-Circle-Key-Id:', keyIdHeader);
-    console.log('[DEBUG WEBHOOK] X-Circle-Signature (Base64):', signatureHeader ? signatureHeader.substring(0, 35) + '...' : 'NONE');
-
     // 2. Cryptographic signature verification (v2 ECDSA SHA-256)
     const verification = await verifyCircleWebhookSignature({
       rawRequestBody,
@@ -22,36 +17,41 @@ export async function POST(req: NextRequest) {
       keyIdHeader,
     });
 
-    console.log('[DEBUG WEBHOOK] Cryptographic Verification Result (isValid):', verification.isValid);
-
     if (!verification.isValid) {
-      console.error('[DEBUG WEBHOOK] Verification Rejected Reason:', verification.reason);
-      console.log('===========================================================\n');
+      console.error('Circle Webhook Verification Rejected:', verification.reason);
       return NextResponse.json({ error: verification.reason || 'Invalid webhook signature' }, { status: 401 });
     }
 
-    console.log('===========================================================\n');
-
-    // 3. Parse JSON only AFTER signature verification succeeds
+    // 3. Parse JSON payload
     const payload = JSON.parse(rawRequestBody);
     const notificationType = payload.notificationType;
 
-    // Process inbound transaction notifications
-    if (notificationType === 'transactions' || notificationType === 'inboundTransfers') {
+    // Accept Circle notification types: 'transfers', 'transactions', 'inboundTransfers', 'settlements'
+    const validNotificationTypes = ['transfers', 'transactions', 'inboundTransfers', 'settlements'];
+    const isMatchingType = !notificationType || validNotificationTypes.includes(notificationType);
+
+    if (isMatchingType) {
       const eventData = payload.event || payload.notification || payload;
-      const transferState = eventData.state || eventData.status;
-      const destinationAddress = (eventData.destinationAddress || eventData.to || '').toLowerCase();
+      const transferState = (eventData.state || eventData.status || 'COMPLETE').toUpperCase();
+      const destinationAddress = (
+        eventData.destinationAddress ||
+        eventData.to ||
+        eventData.address ||
+        ''
+      ).toLowerCase();
+
       const amounts = eventData.amounts || [eventData.amount || '0'];
       const transferAmountStr = String(amounts[0] || '0');
       const transferAmount = parseFloat(transferAmountStr);
-      const txHash = eventData.txHash || eventData.transactionHash || eventData.id || '0x-webhook-tx';
+      const txHash = eventData.txHash || eventData.transactionHash || eventData.id || `0x-webhook-${Date.now()}`;
 
-      if (transferState === 'COMPLETE' && destinationAddress) {
-        // Find matching user wallet in DB
+      if ((transferState === 'COMPLETE' || transferState === 'SUCCESS' || transferState === 'CONFIRMED') && destinationAddress) {
+        // Find matching custodial wallet in DB (case-insensitive mode)
         const wallet = await prisma.wallet.findFirst({
           where: {
             address: {
               equals: destinationAddress,
+              mode: 'insensitive',
             },
           },
           include: {
