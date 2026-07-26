@@ -41,19 +41,20 @@ export async function POST(req: NextRequest) {
         ''
       ).toLowerCase();
 
+      const walletId = eventData.walletId || '';
       const amounts = eventData.amounts || [eventData.amount || '0'];
       const transferAmountStr = String(amounts[0] || '0');
       const transferAmount = parseFloat(transferAmountStr);
       const txHash = eventData.txHash || eventData.transactionHash || eventData.id || `0x-webhook-${Date.now()}`;
 
-      if ((transferState === 'COMPLETE' || transferState === 'SUCCESS' || transferState === 'CONFIRMED') && destinationAddress) {
-        // Find matching custodial wallet in DB (case-insensitive mode)
+      if ((transferState === 'COMPLETE' || transferState === 'SUCCESS' || transferState === 'CONFIRMED')) {
+        // Find matching custodial wallet in DB by address OR by circleWalletId
         const wallet = await prisma.wallet.findFirst({
           where: {
-            address: {
-              equals: destinationAddress,
-              mode: 'insensitive',
-            },
+            OR: [
+              ...(destinationAddress ? [{ address: { equals: destinationAddress, mode: 'insensitive' as const } }] : []),
+              ...(walletId ? [{ circleWalletId: { equals: walletId } }] : []),
+            ],
           },
           include: {
             user: {
@@ -95,9 +96,8 @@ export async function POST(req: NextRequest) {
                     },
                   });
                   sentToInngest = true;
-                  console.log('✅ Inngest event dispatched successfully to primary queue.');
                 } catch (inngestErr: any) {
-                  console.warn('⚠️ INNGEST UNAVAILABLE — falling back to direct execution, durability/retry disabled for this run:', inngestErr.message);
+                  console.warn('⚠️ INNGEST UNAVAILABLE — falling back to direct execution:', inngestErr.message);
                 }
 
                 // Direct background execution fallback if Inngest runner is offline or unconfigured
@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
 
           return NextResponse.json({
             success: true,
-            message: `Processed transfer of ${transferAmountStr} USDC to ${destinationAddress}`,
+            message: `Processed transfer of ${transferAmountStr} USDC to ${destinationAddress || walletId}`,
             triggeredWorkflows: triggeredCount,
           });
         }
@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * Direct workflow execution fallback runner when Inngest runner is offline or unconfigured
+ * Direct workflow execution fallback runner with resilient step-by-step isolation
  */
 async function executeWorkflowDirectly({
   workflowId,
@@ -182,12 +182,20 @@ async function executeWorkflowDirectly({
     },
   ];
 
+  const updateExecutionLogs = async () => {
+    await prisma.execution.update({
+      where: { id: execution.id },
+      data: { stepLogs: stepLogs as any },
+    });
+  };
+
+  await updateExecutionLogs();
+
   const outgoingEdges = edges.filter((e: any) => e.source === triggerNode.id);
   const targetNodeIds = outgoingEdges.map((e: any) => e.target);
   const actionNodes = nodes.filter((n: any) => targetNodeIds.includes(n.id));
 
   const totalAmount = parseFloat(triggerAmount);
-  let hasFailed = false;
 
   for (const node of actionNodes) {
     const percentage = parseFloat(node.data?.percentage || '0');
@@ -213,9 +221,14 @@ async function executeWorkflowDirectly({
           timestamp: new Date().toISOString(),
         });
       } else if (node.type === 'bridge') {
+        const destinationAddress = node.data?.destinationAddress;
+        if (!destinationAddress || destinationAddress.length < 32) {
+          throw new Error(`Invalid Solana destination address: "${destinationAddress || ''}"`);
+        }
+
         const res: any = await executeAppKitBridge({
           userWalletAddress: walletAddress,
-          destinationAddress: node.data?.destinationAddress,
+          destinationAddress,
           amountUsdc: actionAmount,
         });
 
@@ -229,9 +242,14 @@ async function executeWorkflowDirectly({
           timestamp: new Date().toISOString(),
         });
       } else if (node.type === 'send') {
+        const destinationAddress = node.data?.destinationAddress;
+        if (!destinationAddress || !destinationAddress.startsWith('0x')) {
+          throw new Error(`Invalid EVM destination address: "${destinationAddress || ''}"`);
+        }
+
         const res: any = await executeAppKitSend({
           userWalletAddress: walletAddress,
-          destinationAddress: node.data?.destinationAddress,
+          destinationAddress,
           amountUsdc: actionAmount,
         });
 
@@ -241,12 +259,20 @@ async function executeWorkflowDirectly({
           nodeName: node.data?.label || 'Send Action',
           status: 'COMPLETE',
           txHash: res?.txHash || res?.id || '0x-send-complete',
-          details: `Sent ${actionAmount} USDC to ${node.data?.destinationAddress}`,
+          details: `Sent ${actionAmount} USDC to ${destinationAddress}`,
+          timestamp: new Date().toISOString(),
+        });
+      } else if (node.type === 'hold') {
+        stepLogs.push({
+          stepId: node.id,
+          nodeType: 'hold',
+          nodeName: node.data?.label || 'Keep Remainder',
+          status: 'COMPLETE',
+          details: `Retained ${percentage}% (${actionAmount} USDC) safely in user wallet on Arc Testnet`,
           timestamp: new Date().toISOString(),
         });
       }
     } catch (err: any) {
-      hasFailed = true;
       stepLogs.push({
         stepId: node.id,
         nodeType: node.type,
@@ -255,10 +281,12 @@ async function executeWorkflowDirectly({
         error: err.message || String(err),
         timestamp: new Date().toISOString(),
       });
-      break;
     }
+
+    await updateExecutionLogs();
   }
 
+  const hasFailed = stepLogs.some((s) => s.status === 'FAILED');
   await prisma.execution.update({
     where: { id: execution.id },
     data: {
