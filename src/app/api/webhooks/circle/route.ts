@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
               if (transferAmount >= minAmount && transferAmount <= maxAmount) {
                 let sentToInngest = false;
 
-                // Try sending event to Inngest
+                // Try sending event to Inngest primary queue
                 try {
                   await inngest.send({
                     name: 'workflow.trigger',
@@ -95,11 +95,12 @@ export async function POST(req: NextRequest) {
                     },
                   });
                   sentToInngest = true;
+                  console.log('✅ Inngest event dispatched successfully to primary queue.');
                 } catch (inngestErr: any) {
-                  console.warn('Inngest event dispatch notice (falling back to direct background execution):', inngestErr.message);
+                  console.warn('⚠️ INNGEST UNAVAILABLE — falling back to direct execution, durability/retry disabled for this run:', inngestErr.message);
                 }
 
-                // Direct background execution fallback if Inngest runner is offline
+                // Direct background execution fallback if Inngest runner is offline or unconfigured
                 if (!sentToInngest) {
                   executeWorkflowDirectly({
                     workflowId: workflow.id,
