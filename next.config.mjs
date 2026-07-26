@@ -2,14 +2,7 @@
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ['@xyflow/react'],
-  turbopack: {},
-  webpack: (config) => {
-    config.externals.push({
-      'utf-8-validate': 'commonjs utf-8-validate',
-      'bufferutil': 'commonjs bufferutil',
-    });
-    return config;
-  },
+  serverExternalPackages: ['utf-8-validate', 'bufferutil'],
 };
 
 export default nextConfig;
