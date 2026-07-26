@@ -32,17 +32,21 @@ export async function POST(req: NextRequest) {
 
     console.log('[DEBUG WEBHOOK] notificationType:', notificationType);
 
-    // Accept Circle notification types: "transactions.inbound", "transactions.outbound", etc.
+    // FIX A: STRICT INBOUND ONLY MATCHING (Reject outbound transfers to prevent self-trigger loop)
     const isMatchingType =
-      !notificationType ||
-      notificationType.startsWith('transactions.') ||
-      notificationType.includes('inbound') ||
-      notificationType.includes('transfer') ||
-      notificationType === 'contracts.eventLog' ||
-      notificationType.startsWith('modularWallet.');
+      notificationType === 'transactions.inbound' ||
+      notificationType.endsWith('.inbound') ||
+      (notificationType.includes('inbound') && !notificationType.includes('outbound'));
 
     if (isMatchingType) {
       const eventData = payload.notification || payload.event || payload;
+      const transactionType = (eventData.transactionType || eventData.type || '').toUpperCase();
+
+      if (transactionType && transactionType === 'OUTBOUND') {
+        console.log('[DEBUG WEBHOOK] Ignored OUTBOUND transaction to prevent self-trigger loop');
+        return NextResponse.json({ success: true, message: 'Ignored non-inbound transaction' });
+      }
+
       const transferState = (eventData.state || eventData.status || 'COMPLETE').toUpperCase();
       const destinationAddress = (
         eventData.destinationAddress ||
@@ -57,7 +61,7 @@ export async function POST(req: NextRequest) {
       const transferAmount = parseFloat(transferAmountStr);
       const txHash = eventData.txHash || eventData.transactionHash || eventData.id || `0x-webhook-${Date.now()}`;
 
-      console.log('[DEBUG WEBHOOK] Matched payload fields:');
+      console.log('[DEBUG WEBHOOK] Matched INBOUND payload fields:');
       console.log('   walletId:', walletId);
       console.log('   destinationAddress:', destinationAddress);
       console.log('   transferAmountStr:', transferAmountStr);
@@ -150,7 +154,32 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * Direct workflow execution runner with resilient step-by-step isolation
+ * BFS Traversal to find all action nodes transitively reachable from the trigger node
+ */
+function getReachableActionNodes(triggerNodeId: string, nodes: any[], edges: any[]) {
+  const visited = new Set<string>();
+  const queue = [triggerNodeId];
+  const orderedActionNodes: any[] = [];
+
+  while (queue.length > 0) {
+    const currentId = queue.shift()!;
+    const outgoing = edges.filter((e: any) => e.source === currentId);
+    for (const edge of outgoing) {
+      if (!visited.has(edge.target)) {
+        visited.add(edge.target);
+        const node = nodes.find((n: any) => n.id === edge.target);
+        if (node && node.type !== 'trigger') {
+          orderedActionNodes.push(node);
+          queue.push(node.id);
+        }
+      }
+    }
+  }
+  return orderedActionNodes;
+}
+
+/**
+ * Direct workflow execution runner with resilient step-by-step isolation and BFS chained node execution
  */
 async function executeWorkflowDirectly({
   workflowId,
@@ -205,10 +234,8 @@ async function executeWorkflowDirectly({
 
   await updateExecutionLogs();
 
-  const outgoingEdges = edges.filter((e: any) => e.source === triggerNode.id);
-  const targetNodeIds = outgoingEdges.map((e: any) => e.target);
-  const actionNodes = nodes.filter((n: any) => targetNodeIds.includes(n.id));
-
+  // FIX B: Transitive graph traversal (BFS) to execute all chained downstream nodes
+  const actionNodes = getReachableActionNodes(triggerNode.id, nodes, edges);
   const totalAmount = parseFloat(triggerAmount);
 
   for (const node of actionNodes) {

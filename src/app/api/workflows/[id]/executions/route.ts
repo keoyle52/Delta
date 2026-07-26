@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { inngest } from '@/lib/inngest/client';
 import { executeAppKitSwap, executeAppKitBridge, executeAppKitSend } from '@/lib/circle/app-kit';
+import { getWalletBalances } from '@/lib/arc/rpc';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const { id } = await params;
     const userId = (session.user as any).id;
     const body = await req.json().catch(() => ({}));
-    const testAmount = body.amount || '20.00';
+    let testAmount = body.amount || '20.00';
 
     const userWithWallet = await prisma.user.findUnique({
       where: { id: userId },
@@ -62,6 +63,29 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     if (!userWithWallet || !userWithWallet.wallet) {
       return NextResponse.json({ error: 'User wallet not provisioned yet' }, { status: 400 });
+    }
+
+    const walletAddress = userWithWallet.wallet.address;
+
+    // FIX C: Balance validation before test execution
+    try {
+      const realBalances = await getWalletBalances(walletAddress);
+      const availableUsdc = parseFloat(realBalances.usdc || '0');
+      const reqAmount = parseFloat(testAmount);
+
+      if (availableUsdc <= 0) {
+        return NextResponse.json(
+          { error: `Insufficient balance on Arc Testnet. Custodial wallet has 0.00 USDC available. Please fund your wallet using Circle Faucet first.` },
+          { status: 400 }
+        );
+      }
+
+      if (reqAmount > availableUsdc) {
+        testAmount = availableUsdc.toFixed(2);
+        console.warn(`Adjusted test amount from requested to available balance (${testAmount} USDC)`);
+      }
+    } catch (balanceErr: any) {
+      console.warn('Balance check warning:', balanceErr.message);
     }
 
     const testTxHash = `0x-manual-test-${Date.now().toString(16)}`;
@@ -74,7 +98,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           workflowId: id,
           triggerTxHash: testTxHash,
           triggerAmount: testAmount,
-          walletAddress: userWithWallet.wallet.address,
+          walletAddress,
           walletId: userWithWallet.wallet.circleWalletId,
         },
       });
@@ -88,7 +112,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       workflowId: id,
       triggerTxHash: testTxHash,
       triggerAmount: testAmount,
-      walletAddress: userWithWallet.wallet.address,
+      walletAddress,
       walletId: userWithWallet.wallet.circleWalletId,
     }).catch((err) => console.error('Direct manual workflow execution error:', err));
 
@@ -100,6 +124,31 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+}
+
+/**
+ * BFS Traversal to find all action nodes transitively reachable from the trigger node
+ */
+function getReachableActionNodes(triggerNodeId: string, nodes: any[], edges: any[]) {
+  const visited = new Set<string>();
+  const queue = [triggerNodeId];
+  const orderedActionNodes: any[] = [];
+
+  while (queue.length > 0) {
+    const currentId = queue.shift()!;
+    const outgoing = edges.filter((e: any) => e.source === currentId);
+    for (const edge of outgoing) {
+      if (!visited.has(edge.target)) {
+        visited.add(edge.target);
+        const node = nodes.find((n: any) => n.id === edge.target);
+        if (node && node.type !== 'trigger') {
+          orderedActionNodes.push(node);
+          queue.push(node.id);
+        }
+      }
+    }
+  }
+  return orderedActionNodes;
 }
 
 /**
@@ -158,10 +207,8 @@ async function executeWorkflowDirectly({
 
   await updateExecutionLogs();
 
-  const outgoingEdges = edges.filter((e: any) => e.source === triggerNode.id);
-  const targetNodeIds = outgoingEdges.map((e: any) => e.target);
-  const actionNodes = nodes.filter((n: any) => targetNodeIds.includes(n.id));
-
+  // FIX B: Transitive graph traversal (BFS) to execute all chained downstream nodes
+  const actionNodes = getReachableActionNodes(triggerNode.id, nodes, edges);
   const totalAmount = parseFloat(triggerAmount);
 
   for (const node of actionNodes) {
