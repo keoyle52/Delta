@@ -1,5 +1,5 @@
 /**
- * Arc Network RPC Client with Alchemy & dRPC Fallback
+ * Arc Network RPC Client with Primary & Fallback Transports
  */
 
 import { createPublicClient, fallback, http, formatUnits, parseAbi } from 'viem';
@@ -17,7 +17,7 @@ export const arcTestnet = defineChain({
   rpcUrls: {
     default: {
       http: [
-        process.env.ARC_RPC_PRIMARY || 'https://arc-testnet.g.alchemy.com/v2/4M1t80iX0CzBjHHHpcnpS',
+        process.env.ARC_RPC_PRIMARY || 'https://rpc.testnet.arc.network',
         process.env.ARC_RPC_DRPC || 'https://rpc.drpc.testnet.arc.network',
       ],
     },
@@ -46,11 +46,11 @@ const ERC20_ABI = parseAbi([
 ]);
 
 /**
- * Creates Viem Public Client with Alchemy primary & dRPC fallback
+ * Creates Viem Public Client with primary RPC & dRPC fallback
  */
 export function getArcPublicClient() {
   const rpcEndpoints = [
-    process.env.ARC_RPC_PRIMARY || 'https://arc-testnet.g.alchemy.com/v2/4M1t80iX0CzBjHHHpcnpS',
+    process.env.ARC_RPC_PRIMARY || 'https://rpc.testnet.arc.network',
     process.env.ARC_RPC_DRPC || 'https://rpc.drpc.testnet.arc.network',
   ].filter(Boolean) as string[];
 
@@ -105,7 +105,7 @@ export async function getWalletBalances(address: string) {
       nativeGasUsdc,
       formattedUsdc: parseFloat(usdcBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 }),
       formattedEurc: parseFloat(eurcBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 }),
-      activeProviders: ['Alchemy', 'dRPC'],
+      activeProviders: ['Arc Public RPC', 'dRPC'],
     };
   } catch (error: any) {
     console.error('Error fetching Arc RPC balances:', error);

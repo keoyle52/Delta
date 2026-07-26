@@ -33,56 +33,45 @@ export async function getOrCreateUserWallet(userId: string) {
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
-      name: 'Email Passcode',
+      name: 'Credentials',
       credentials: {
-        email: { label: 'Email Address', type: 'email', placeholder: 'user@example.com' },
+        email: { label: 'Email', type: 'email' },
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
-        if (!credentials?.email) {
-          throw new Error('Email is required');
+        if (!credentials?.email || !credentials?.password) {
+          throw new Error('Email and password are required.');
         }
 
         const email = credentials.email.toLowerCase().trim();
+
+        // 1. Find user in database
         let user = await prisma.user.findUnique({
           where: { email },
-          include: { wallet: true },
         });
 
-        // Auto signup if user does not exist
+        // 2. Auto-register user if not present (Demo Mode)
         if (!user) {
-          const hashedPassword = credentials.password
-            ? await bcrypt.hash(credentials.password, 10)
-            : null;
-
+          const hashedPassword = await bcrypt.hash(credentials.password, 10);
           user = await prisma.user.create({
             data: {
               email,
               password: hashedPassword,
             },
-            include: { wallet: true },
           });
-        } else if (credentials.password && user.password) {
-          const isValid = await bcrypt.compare(credentials.password, user.password);
-          if (!isValid) {
-            throw new Error('Invalid credentials');
+        } else {
+          const isValidPassword = await bcrypt.compare(credentials.password, user.password || '');
+          if (!isValidPassword) {
+            throw new Error('Invalid credentials provided.');
           }
         }
 
-        // Idempotent wallet provisioning check
-        let userWallet = user.wallet;
-        if (!userWallet) {
-          try {
-            if (process.env.CIRCLE_API_KEY && process.env.CIRCLE_ENTITY_SECRET && process.env.CIRCLE_WALLET_SET_ID) {
-              userWallet = await getOrCreateUserWallet(user.id);
-            } else {
-              console.warn(
-                'Circle API configuration missing. Custodial wallet auto-provisioning skipped.'
-              );
-            }
-          } catch (err: any) {
-            console.error('Wallet provisioning warning:', err.message);
-          }
+        // 3. Provision / link Circle custodial wallet on Arc Testnet
+        let userWallet: any = null;
+        try {
+          userWallet = await getOrCreateUserWallet(user.id);
+        } catch (walletErr: any) {
+          console.warn('Wallet provisioning warning:', walletErr.message);
         }
 
         return {
@@ -118,5 +107,5 @@ export const authOptions: NextAuthOptions = {
   pages: {
     signIn: '/login',
   },
-  secret: process.env.NEXTAUTH_SECRET || 'delta-development-secret-key-32-chars-min',
+  secret: process.env.NEXTAUTH_SECRET,
 };

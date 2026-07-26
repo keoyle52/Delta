@@ -95,7 +95,7 @@ export async function executeAppKitBridge({
       throw new Error('Solana_Devnet forwarder is not supported; recipientAddress bridge flow cannot proceed.');
     }
 
-    // 2. Perform CCTP bridge call with developer-controlled wallet adapter
+    // 2. Perform CCTP bridge call with forwarder-based destination (no adapter on 'to')
     const bridgeResult = await kit.bridge({
       from: {
         adapter: circleWalletsAdapter,
@@ -103,7 +103,6 @@ export async function executeAppKitBridge({
         address: userWalletAddress,
       },
       to: {
-        adapter: circleWalletsAdapter,
         chain: 'Solana_Devnet',
         recipientAddress: destinationAddress,
       } as any,
