@@ -13,10 +13,8 @@ import {
   Plus,
   Zap,
   ArrowRight,
-  Shield,
   Activity,
   Coins,
-  Server,
 } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -100,7 +98,7 @@ export default function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-7xl w-full p-6 sm:p-8 space-y-8">
-      {/* Dashboard Welcome Header */}
+      {/* Dashboard Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-800 pb-6">
         <div>
           <div className="flex items-center gap-3 mb-1">
@@ -108,10 +106,10 @@ export default function DashboardPage() {
               <Zap className="h-3.5 w-3.5" />
               Control Center
             </div>
-            {/* Arc Official Node Providers Badge */}
-            <div className="inline-flex items-center gap-1.5 rounded-full border border-blue-500/30 bg-blue-950/40 px-2.5 py-0.5 text-[10px] font-mono text-blue-300">
-              <Server className="h-3 w-3 text-blue-400" />
-              <span>Powered by: Arc Multi-RPC (dRPC / Blockdaemon / Arc Public)</span>
+            {/* Built on Arc Badge */}
+            <div className="inline-flex items-center gap-1.5 rounded-full border border-purple-500/30 bg-purple-950/40 px-2.5 py-0.5 text-[10px] font-semibold text-purple-300">
+              <span className="h-1.5 w-1.5 rounded-full bg-purple-400 animate-pulse" />
+              Built on Arc
             </div>
           </div>
           <h1 className="text-3xl font-bold tracking-tight text-white font-sans">
@@ -129,7 +127,7 @@ export default function DashboardPage() {
             className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900 px-4 py-2.5 text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-colors"
           >
             <RefreshCw className={`h-4 w-4 ${loadingBalances ? 'animate-spin' : ''}`} />
-            Refresh Arc RPC
+            Refresh Balances
           </button>
 
           <button

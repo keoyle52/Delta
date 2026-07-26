@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
-import { LayoutDashboard, Workflow, LogOut, ExternalLink, Zap } from 'lucide-react';
+import { LayoutDashboard, Workflow, LogOut } from 'lucide-react';
 
 export default function Header() {
   const pathname = usePathname();
@@ -14,20 +14,18 @@ export default function Header() {
     <header className="sticky top-0 z-50 w-full border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         
-        {/* Brand Logo & Wordmark + Built on Arc Attribution Badge */}
+        {/* Brand Logo & Wordmark + Built on Arc Badge */}
         <div className="flex items-center gap-4">
           <Link href="/dashboard" className="flex items-center gap-3 group">
-            <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 via-blue-600 to-teal-500 p-0.5 shadow-lg shadow-indigo-500/20 group-hover:scale-105 transition-transform">
-              <div className="flex h-full w-full items-center justify-center rounded-[10px] bg-slate-950">
-                <Zap className="h-5 w-5 text-indigo-400" />
-              </div>
+            <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 border border-slate-800 p-1.5 shadow-md group-hover:scale-105 transition-transform">
+              <Image src="/logo.svg" alt="Delta Logo" width={28} height={28} className="h-full w-full object-contain" />
             </div>
             <span className="text-xl font-bold tracking-tight text-white font-sans">
               delta
             </span>
           </Link>
 
-          {/* Built on Arc Badge (Strict requirement: separate attribution badge component) */}
+          {/* Built on Arc Badge */}
           <div className="inline-flex items-center gap-1.5 rounded-full border border-purple-500/30 bg-purple-950/40 px-2.5 py-0.5 text-xs font-semibold text-purple-300 shadow-inner">
             <span className="h-1.5 w-1.5 rounded-full bg-purple-400 animate-pulse" />
             Built on Arc

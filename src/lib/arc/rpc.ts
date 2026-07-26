@@ -1,11 +1,5 @@
 /**
- * Arc Network RPC Client with Multi-Node Provider Fallback
- *
- * Arc Ecosystem Official Node Providers (Docs: https://docs.arc.io/arc/tools/node-providers):
- * 1. Primary: https://rpc.testnet.arc.network
- * 2. Blockdaemon: https://rpc.blockdaemon.testnet.arc.network
- * 3. dRPC: https://rpc.drpc.testnet.arc.network
- * 4. QuickNode (Optional)
+ * Arc Network RPC Client with Alchemy & dRPC Fallback
  */
 
 import { createPublicClient, fallback, http, formatUnits, parseAbi } from 'viem';
@@ -23,8 +17,7 @@ export const arcTestnet = defineChain({
   rpcUrls: {
     default: {
       http: [
-        process.env.ARC_RPC_PRIMARY || 'https://rpc.testnet.arc.network',
-        process.env.ARC_RPC_BLOCKDAEMON || 'https://rpc.blockdaemon.testnet.arc.network',
+        process.env.ARC_RPC_PRIMARY || 'https://arc-testnet.g.alchemy.com/v2/4M1t80iX0CzBjHHHpcnpS',
         process.env.ARC_RPC_DRPC || 'https://rpc.drpc.testnet.arc.network',
       ],
     },
@@ -53,14 +46,12 @@ const ERC20_ABI = parseAbi([
 ]);
 
 /**
- * Creates Viem Public Client with fallback transport across official Arc node providers
+ * Creates Viem Public Client with Alchemy primary & dRPC fallback
  */
 export function getArcPublicClient() {
   const rpcEndpoints = [
-    process.env.ARC_RPC_PRIMARY || 'https://rpc.testnet.arc.network',
-    process.env.ARC_RPC_BLOCKDAEMON || 'https://rpc.blockdaemon.testnet.arc.network',
+    process.env.ARC_RPC_PRIMARY || 'https://arc-testnet.g.alchemy.com/v2/4M1t80iX0CzBjHHHpcnpS',
     process.env.ARC_RPC_DRPC || 'https://rpc.drpc.testnet.arc.network',
-    process.env.ARC_RPC_QUICKNODE,
   ].filter(Boolean) as string[];
 
   return createPublicClient({
@@ -114,7 +105,7 @@ export async function getWalletBalances(address: string) {
       nativeGasUsdc,
       formattedUsdc: parseFloat(usdcBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 }),
       formattedEurc: parseFloat(eurcBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 }),
-      activeProviders: ['Arc Public RPC', 'Blockdaemon', 'dRPC'],
+      activeProviders: ['Alchemy', 'dRPC'],
     };
   } catch (error: any) {
     console.error('Error fetching Arc RPC balances:', error);
