@@ -66,7 +66,7 @@ export async function executeAppKitSwap({
 
     return swapResult;
   } catch (error: any) {
-    console.error('App Kit Swap Error:', error);
+    console.error('App Kit Swap Full Error Object:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
     throw new Error(`App Kit Swap operation failed: ${error.message || error}`);
   }
 }
@@ -112,7 +112,7 @@ export async function executeAppKitBridge({
 
     return bridgeResult;
   } catch (error: any) {
-    console.error('App Kit Bridge Error:', error);
+    console.error('App Kit Bridge Full Error Object:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
     throw new Error(`App Kit Bridge operation failed: ${error.message || error}`);
   }
 }
@@ -146,7 +146,7 @@ export async function executeAppKitSend({
 
     return sendResult;
   } catch (error: any) {
-    console.error('App Kit Send Error:', error);
+    console.error('App Kit Send Full Error Object:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
     throw new Error(`App Kit Send operation failed: ${error.message || error}`);
   }
 }
