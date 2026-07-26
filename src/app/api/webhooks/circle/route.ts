@@ -81,9 +81,7 @@ export async function POST(req: NextRequest) {
                 : Infinity;
 
               if (transferAmount >= minAmount && transferAmount <= maxAmount) {
-                let sentToInngest = false;
-
-                // Try sending event to Inngest primary queue
+                // 1. Send event to Inngest for logging/durability tracking (non-blocking)
                 try {
                   await inngest.send({
                     name: 'workflow.trigger',
@@ -95,21 +93,19 @@ export async function POST(req: NextRequest) {
                       walletId: wallet.circleWalletId,
                     },
                   });
-                  sentToInngest = true;
+                  console.log('✅ Event sent to Inngest (informational, not blocking)');
                 } catch (inngestErr: any) {
-                  console.warn('⚠️ INNGEST UNAVAILABLE — falling back to direct execution:', inngestErr.message);
+                  console.warn('Inngest send failed (informational, not blocking):', inngestErr.message);
                 }
 
-                // Direct background execution fallback if Inngest runner is offline or unconfigured
-                if (!sentToInngest) {
-                  executeWorkflowDirectly({
-                    workflowId: workflow.id,
-                    triggerTxHash: txHash,
-                    triggerAmount: transferAmountStr,
-                    walletAddress: wallet.address,
-                    walletId: wallet.circleWalletId,
-                  }).catch((err) => console.error('Direct workflow execution error:', err));
-                }
+                // 2. ALWAYS execute workflow directly to guarantee instant execution & DB logs
+                executeWorkflowDirectly({
+                  workflowId: workflow.id,
+                  triggerTxHash: txHash,
+                  triggerAmount: transferAmountStr,
+                  walletAddress: wallet.address,
+                  walletId: wallet.circleWalletId,
+                }).catch((err) => console.error('Direct workflow execution error:', err));
 
                 triggeredCount++;
               }
@@ -136,7 +132,7 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * Direct workflow execution fallback runner with resilient step-by-step isolation
+ * Direct workflow execution runner with resilient step-by-step isolation
  */
 async function executeWorkflowDirectly({
   workflowId,

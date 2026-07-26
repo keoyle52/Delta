@@ -65,8 +65,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     const testTxHash = `0x-manual-test-${Date.now().toString(16)}`;
-    let sentToInngest = false;
 
+    // 1. Send event to Inngest for logging/durability tracking (non-blocking)
     try {
       await inngest.send({
         name: 'workflow.trigger',
@@ -78,21 +78,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           walletId: userWithWallet.wallet.circleWalletId,
         },
       });
-      sentToInngest = true;
+      console.log('✅ Event sent to Inngest (informational, not blocking)');
     } catch (inngestErr: any) {
-      console.warn('Inngest dispatch notice for manual trigger:', inngestErr.message);
+      console.warn('Inngest send failed (informational, not blocking):', inngestErr.message);
     }
 
-    // Direct background execution fallback if Inngest runner is unconfigured
-    if (!sentToInngest) {
-      executeWorkflowDirectly({
-        workflowId: id,
-        triggerTxHash: testTxHash,
-        triggerAmount: testAmount,
-        walletAddress: userWithWallet.wallet.address,
-        walletId: userWithWallet.wallet.circleWalletId,
-      }).catch((err) => console.error('Direct manual workflow execution error:', err));
-    }
+    // 2. ALWAYS execute workflow directly to guarantee instant execution & DB logs
+    executeWorkflowDirectly({
+      workflowId: id,
+      triggerTxHash: testTxHash,
+      triggerAmount: testAmount,
+      walletAddress: userWithWallet.wallet.address,
+      walletId: userWithWallet.wallet.circleWalletId,
+    }).catch((err) => console.error('Direct manual workflow execution error:', err));
 
     return NextResponse.json({
       success: true,
@@ -105,7 +103,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 /**
- * Direct workflow execution fallback runner when Inngest runner is offline or unconfigured
+ * Direct workflow execution runner
  */
 async function executeWorkflowDirectly({
   workflowId,
@@ -151,12 +149,20 @@ async function executeWorkflowDirectly({
     },
   ];
 
+  const updateExecutionLogs = async () => {
+    await prisma.execution.update({
+      where: { id: execution.id },
+      data: { stepLogs: stepLogs as any },
+    });
+  };
+
+  await updateExecutionLogs();
+
   const outgoingEdges = edges.filter((e: any) => e.source === triggerNode.id);
   const targetNodeIds = outgoingEdges.map((e: any) => e.target);
   const actionNodes = nodes.filter((n: any) => targetNodeIds.includes(n.id));
 
   const totalAmount = parseFloat(triggerAmount);
-  let hasFailed = false;
 
   for (const node of actionNodes) {
     const percentage = parseFloat(node.data?.percentage || '0');
@@ -182,9 +188,14 @@ async function executeWorkflowDirectly({
           timestamp: new Date().toISOString(),
         });
       } else if (node.type === 'bridge') {
+        const destinationAddress = node.data?.destinationAddress;
+        if (!destinationAddress || destinationAddress.length < 32) {
+          throw new Error(`Invalid Solana destination address: "${destinationAddress || ''}"`);
+        }
+
         const res: any = await executeAppKitBridge({
           userWalletAddress: walletAddress,
-          destinationAddress: node.data?.destinationAddress,
+          destinationAddress,
           amountUsdc: actionAmount,
         });
 
@@ -198,9 +209,14 @@ async function executeWorkflowDirectly({
           timestamp: new Date().toISOString(),
         });
       } else if (node.type === 'send') {
+        const destinationAddress = node.data?.destinationAddress;
+        if (!destinationAddress || !destinationAddress.startsWith('0x')) {
+          throw new Error(`Invalid EVM destination address: "${destinationAddress || ''}"`);
+        }
+
         const res: any = await executeAppKitSend({
           userWalletAddress: walletAddress,
-          destinationAddress: node.data?.destinationAddress,
+          destinationAddress,
           amountUsdc: actionAmount,
         });
 
@@ -210,12 +226,20 @@ async function executeWorkflowDirectly({
           nodeName: node.data?.label || 'Send Action',
           status: 'COMPLETE',
           txHash: res?.txHash || res?.id || '0x-send-complete',
-          details: `Sent ${actionAmount} USDC to ${node.data?.destinationAddress}`,
+          details: `Sent ${actionAmount} USDC to ${destinationAddress}`,
+          timestamp: new Date().toISOString(),
+        });
+      } else if (node.type === 'hold') {
+        stepLogs.push({
+          stepId: node.id,
+          nodeType: 'hold',
+          nodeName: node.data?.label || 'Keep Remainder',
+          status: 'COMPLETE',
+          details: `Retained ${percentage}% (${actionAmount} USDC) safely in user wallet on Arc Testnet`,
           timestamp: new Date().toISOString(),
         });
       }
     } catch (err: any) {
-      hasFailed = true;
       stepLogs.push({
         stepId: node.id,
         nodeType: node.type,
@@ -224,10 +248,12 @@ async function executeWorkflowDirectly({
         error: err.message || String(err),
         timestamp: new Date().toISOString(),
       });
-      break;
     }
+
+    await updateExecutionLogs();
   }
 
+  const hasFailed = stepLogs.some((s) => s.status === 'FAILED');
   await prisma.execution.update({
     where: { id: execution.id },
     data: {
