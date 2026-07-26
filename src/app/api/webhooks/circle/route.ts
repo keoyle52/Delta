@@ -180,7 +180,7 @@ function getReachableActionNodes(triggerNodeId: string, nodes: any[], edges: any
 }
 
 /**
- * Direct workflow execution runner with resilient step-by-step isolation, BFS chained node execution, and Resend email alerts
+ * Direct workflow execution runner with resilient step-by-step isolation, BFS chained node execution, and conditional Resend email alerts
  */
 async function executeWorkflowDirectly({
   workflowId,
@@ -238,6 +238,7 @@ async function executeWorkflowDirectly({
   // Transitive graph traversal (BFS) to execute all chained downstream nodes
   const actionNodes = getReachableActionNodes(triggerNode.id, nodes, edges);
   const totalAmount = parseFloat(triggerAmount);
+  let hasNotifyNode = false;
 
   for (const node of actionNodes) {
     const percentage = parseFloat(node.data?.percentage || '0');
@@ -314,6 +315,7 @@ async function executeWorkflowDirectly({
           timestamp: new Date().toISOString(),
         });
       } else if (node.type === 'notify') {
+        hasNotifyNode = true;
         stepLogs.push({
           stepId: node.id,
           nodeType: 'notify',
@@ -349,22 +351,24 @@ async function executeWorkflowDirectly({
     },
   });
 
-  // Send Resend Execution Alert Email to user
-  try {
-    const user = await prisma.user.findFirst({
-      where: { workflows: { some: { id: workflowId } } },
-    });
-
-    if (user && user.email) {
-      await sendExecutionNotificationEmail({
-        to: user.email,
-        workflowName: workflow.name,
-        status: finalStatus,
-        triggerAmount,
-        stepLogs,
+  // ONLY send Resend Execution Alert Email if the workflow explicitly contains a 'notify' node
+  if (hasNotifyNode) {
+    try {
+      const user = await prisma.user.findFirst({
+        where: { workflows: { some: { id: workflowId } } },
       });
+
+      if (user && user.email) {
+        await sendExecutionNotificationEmail({
+          to: user.email,
+          workflowName: workflow.name,
+          status: finalStatus,
+          triggerAmount,
+          stepLogs,
+        });
+      }
+    } catch (emailErr: any) {
+      console.warn('Resend notification dispatch notice:', emailErr.message);
     }
-  } catch (emailErr: any) {
-    console.warn('Resend notification dispatch notice:', emailErr.message);
   }
 }

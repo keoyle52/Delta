@@ -215,6 +215,7 @@ async function executeWorkflowDirectly({
   // Transitive graph traversal (BFS) to execute all chained downstream nodes
   const actionNodes = getReachableActionNodes(triggerNode.id, nodes, edges);
   const totalAmount = parseFloat(triggerAmount);
+  let hasNotifyNode = false;
 
   for (const node of actionNodes) {
     const percentage = parseFloat(node.data?.percentage || '0');
@@ -291,6 +292,7 @@ async function executeWorkflowDirectly({
           timestamp: new Date().toISOString(),
         });
       } else if (node.type === 'notify') {
+        hasNotifyNode = true;
         stepLogs.push({
           stepId: node.id,
           nodeType: 'notify',
@@ -326,8 +328,8 @@ async function executeWorkflowDirectly({
     },
   });
 
-  // Send Resend Execution Alert Email to user
-  if (userEmail) {
+  // ONLY send Resend Execution Alert Email if the workflow explicitly contains a 'notify' node
+  if (hasNotifyNode && userEmail) {
     try {
       await sendExecutionNotificationEmail({
         to: userEmail,
