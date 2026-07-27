@@ -18,6 +18,24 @@ export async function getOrCreateUserWallet(userId: string) {
 
   // 2. Provision new Developer-Controlled Custodial Wallet on Arc Testnet
   const newWallet = await createArcUserWallet(userId);
+
+  // 3. Handle potential duplicate address / walletId in DB
+  const existingAddressWallet = await prisma.wallet.findFirst({
+    where: {
+      OR: [
+        { address: newWallet.address },
+        { circleWalletId: newWallet.circleWalletId },
+      ],
+    },
+  });
+
+  if (existingAddressWallet) {
+    return await prisma.wallet.update({
+      where: { id: existingAddressWallet.id },
+      data: { userId },
+    });
+  }
+
   return await prisma.wallet.create({
     data: {
       userId,
@@ -79,7 +97,7 @@ export const authOptions: NextAuthOptions = {
         try {
           userWallet = await getOrCreateUserWallet(user.id);
         } catch (walletErr: any) {
-          console.warn('Wallet provisioning warning:', walletErr.message);
+          console.warn('Wallet provisioning warning during login:', walletErr.message);
         }
 
         return {

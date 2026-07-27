@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { authOptions, getOrCreateUserWallet } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getWalletBalances } from '@/lib/arc/rpc';
 
@@ -12,18 +12,24 @@ export async function GET(req: NextRequest) {
     }
 
     const userId = (session.user as any).id;
-    const wallet = await prisma.wallet.findUnique({
+    let wallet = await prisma.wallet.findUnique({
       where: { userId },
     });
 
+    // Auto-provision custodial wallet on demand if not present in DB
     if (!wallet) {
-      return NextResponse.json({
-        address: null,
-        usdc: '0.00',
-        eurc: '0.00',
-        nativeGasUsdc: '0.00',
-        message: 'No Circle Wallet provisioned yet',
-      });
+      try {
+        wallet = await getOrCreateUserWallet(userId);
+      } catch (provisionErr: any) {
+        console.error('On-demand wallet provisioning error:', provisionErr.message || provisionErr);
+        return NextResponse.json({
+          address: null,
+          usdc: '0.00',
+          eurc: '0.00',
+          nativeGasUsdc: '0.00',
+          message: 'Wallet provisioning in progress or skipped',
+        });
+      }
     }
 
     // Call Arc Testnet RPC for live balances
