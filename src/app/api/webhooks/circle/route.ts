@@ -48,6 +48,31 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: true, message: 'Ignored non-inbound transaction' });
       }
 
+      // FIX B: STRICT TOKEN FILTERING (Reject EURC and non-USDC inbound transfers to prevent swap loop)
+      const tokenSymbol = (
+        eventData.tokenSymbol ||
+        eventData.symbol ||
+        eventData.currency ||
+        eventData.token ||
+        ''
+      ).toUpperCase();
+
+      const tokenAddress = (
+        eventData.tokenAddress ||
+        eventData.contractAddress ||
+        eventData.tokenId ||
+        ''
+      ).toLowerCase();
+
+      const isEurc =
+        tokenSymbol === 'EURC' ||
+        tokenAddress === '0x89b50855aa3be2f677cd6303cec089b5f319d72a';
+
+      if (isEurc || (tokenSymbol && tokenSymbol !== 'USDC' && tokenSymbol !== 'USD')) {
+        console.log(`[DEBUG WEBHOOK] Ignored non-USDC inbound transfer (token: ${tokenSymbol || tokenAddress}) to prevent swap loop.`);
+        return NextResponse.json({ success: true, message: 'Ignored non-USDC inbound transfer' });
+      }
+
       const transferState = (eventData.state || eventData.status || 'COMPLETE').toUpperCase();
       const destinationAddress = (
         eventData.destinationAddress ||
@@ -62,7 +87,7 @@ export async function POST(req: NextRequest) {
       const transferAmount = parseFloat(transferAmountStr);
       const txHash = eventData.txHash || eventData.transactionHash || eventData.id || `0x-webhook-${Date.now()}`;
 
-      console.log('[DEBUG WEBHOOK] Matched INBOUND payload fields:');
+      console.log('[DEBUG WEBHOOK] Matched INBOUND USDC payload fields:');
       console.log('   walletId:', walletId);
       console.log('   destinationAddress:', destinationAddress);
       console.log('   transferAmountStr:', transferAmountStr);
