@@ -45,26 +45,23 @@ export const authOptions: NextAuthOptions = {
         const email = credentials.email.toLowerCase().trim();
         const inputCode = credentials.code.trim();
 
-        // 1. Verify code in database or accept master demo code '123456'
+        // 1. Strict verification: Must match the active unexpired OTP code in Neon Postgres database
         const storedCodeRecord = await prisma.verificationCode.findUnique({
           where: { email },
         });
 
-        const isMasterCode = inputCode === '123456';
-        const isValidCode =
-          isMasterCode ||
-          (storedCodeRecord &&
+        const isValidCode = Boolean(
+          storedCodeRecord &&
             storedCodeRecord.code === inputCode &&
-            storedCodeRecord.expiresAt > new Date());
+            storedCodeRecord.expiresAt > new Date()
+        );
 
         if (!isValidCode) {
-          throw new Error('Invalid or expired verification code. Please request a new code.');
+          throw new Error('Invalid or expired verification code. Access denied.');
         }
 
-        // Clean up used code
-        if (storedCodeRecord) {
-          await prisma.verificationCode.delete({ where: { email } }).catch(() => {});
-        }
+        // Clean up used OTP code to prevent replay attacks
+        await prisma.verificationCode.delete({ where: { email } }).catch(() => {});
 
         // 2. Find existing user OR auto-register new user
         let user = await prisma.user.findUnique({

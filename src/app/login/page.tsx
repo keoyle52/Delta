@@ -14,7 +14,6 @@ export default function LoginPage() {
   const [loggingIn, setLoggingIn] = useState(false);
   const [error, setError] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
-  const [devCodeNotice, setDevCodeNotice] = useState<string | null>(null);
 
   const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,7 +25,6 @@ export default function LoginPage() {
     setSendingCode(true);
     setError('');
     setInfoMessage('');
-    setDevCodeNotice(null);
 
     try {
       const res = await fetch('/api/auth/send-otp', {
@@ -39,9 +37,6 @@ export default function LoginPage() {
       if (res.ok && data.success) {
         setStep('code');
         setInfoMessage(`Verification code sent to ${email}`);
-        if (data.devCode) {
-          setDevCodeNotice(`Demo Mode Verification Code: ${data.devCode} (or master code: 123456)`);
-        }
       } else {
         setError(data.error || 'Failed to send verification code.');
       }
@@ -115,12 +110,6 @@ export default function LoginPage() {
           <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs font-semibold text-emerald-300 text-center flex items-center justify-center gap-2">
             <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
             <span>{infoMessage}</span>
-          </div>
-        )}
-
-        {devCodeNotice && (
-          <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-3 text-xs font-mono text-indigo-300 text-center font-bold">
-            {devCodeNotice}
           </div>
         )}
 

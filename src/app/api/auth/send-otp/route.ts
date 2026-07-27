@@ -37,8 +37,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       message: `Verification code sent to ${email}`,
-      // For development/demo convenience, return code if RESEND_API_KEY is unset
-      devCode: process.env.RESEND_API_KEY ? undefined : code,
     });
   } catch (error: any) {
     console.error('Send OTP error:', error);
