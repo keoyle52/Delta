@@ -41,11 +41,11 @@ export async function POST(req: NextRequest) {
 
     if (isMatchingType) {
       const eventData = payload.notification || payload.event || payload;
-      const transactionType = (eventData.transactionType || eventData.type || '').toUpperCase();
+      const transactionType = (eventData.transactionType || eventData.type || eventData.operation || '').toUpperCase();
 
-      if (transactionType && transactionType === 'OUTBOUND') {
-        console.log('[DEBUG WEBHOOK] Ignored OUTBOUND transaction to prevent self-trigger loop');
-        return NextResponse.json({ success: true, message: 'Ignored non-inbound transaction' });
+      if (transactionType && (transactionType === 'OUTBOUND' || transactionType.includes('SWAP') || transactionType.includes('INTERNAL'))) {
+        console.log('[DEBUG WEBHOOK] Ignored OUTBOUND/SWAP/INTERNAL transaction to prevent self-trigger loop');
+        return NextResponse.json({ success: true, message: 'Ignored non-inbound or swap transaction' });
       }
 
       // FIX B: STRICT TOKEN FILTERING (Reject EURC and non-USDC inbound transfers to prevent swap loop)
@@ -87,6 +87,16 @@ export async function POST(req: NextRequest) {
       const transferAmount = parseFloat(transferAmountStr);
       const txHash = eventData.txHash || eventData.transactionHash || eventData.id || `0x-webhook-${Date.now()}`;
 
+      // FIX C: DEDUPLICATION CHECK BY TX HASH
+      const existingExecution = await prisma.execution.findFirst({
+        where: { triggerTxHash: txHash },
+      });
+
+      if (existingExecution) {
+        console.log(`[DEBUG WEBHOOK] Ignored duplicate txHash: ${txHash}`);
+        return NextResponse.json({ success: true, message: 'Transaction already processed' });
+      }
+
       console.log('[DEBUG WEBHOOK] Matched INBOUND USDC payload fields:');
       console.log('   walletId:', walletId);
       console.log('   destinationAddress:', destinationAddress);
@@ -117,6 +127,21 @@ export async function POST(req: NextRequest) {
           let triggeredCount = 0;
 
           for (const workflow of wallet.user.workflows) {
+            // FIX D: 30-SECOND WORKFLOW COOLDOWN GUARD (Prevents rapid loop re-triggers)
+            const recentExecution = await prisma.execution.findFirst({
+              where: {
+                workflowId: workflow.id,
+                startedAt: {
+                  gt: new Date(Date.now() - 30 * 1000), // 30 second cooldown
+                },
+              },
+            });
+
+            if (recentExecution) {
+              console.log(`[DEBUG WEBHOOK] Workflow ${workflow.id} is on 30s cooldown. Skipping trigger.`);
+              continue;
+            }
+
             const nodes = typeof workflow.nodes === 'string' ? JSON.parse(workflow.nodes) : (workflow.nodes || []);
             const triggerNode = nodes.find((n: any) => n.type === 'trigger');
 
