@@ -4,15 +4,17 @@ import { useState, useEffect, use } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft,
-  RefreshCw,
+  Activity,
   Play,
+  RefreshCw,
+  ExternalLink,
   CheckCircle2,
   XCircle,
   Clock,
-  ExternalLink,
-  Zap,
-  Activity,
+  AlertTriangle,
   Terminal,
+  ChevronRight,
+  ShieldCheck,
 } from 'lucide-react';
 
 export default function ExecutionsPage({ params }: { params: Promise<{ id: string }> }) {
@@ -25,13 +27,14 @@ export default function ExecutionsPage({ params }: { params: Promise<{ id: strin
 
   const fetchExecutions = async () => {
     try {
+      setLoading(true);
       const res = await fetch(`/api/workflows/${workflowId}/executions`);
-      const data = await res.json();
       if (res.ok) {
+        const data = await res.json();
         setExecutions(data);
       }
     } catch (err) {
-      console.error(err);
+      console.error('Failed to fetch executions:', err);
     } finally {
       setLoading(false);
     }
@@ -39,14 +42,13 @@ export default function ExecutionsPage({ params }: { params: Promise<{ id: strin
 
   useEffect(() => {
     fetchExecutions();
-    // Real-time polling every 3 seconds for active executions
-    const interval = setInterval(fetchExecutions, 3000);
+    const interval = setInterval(fetchExecutions, 5000);
     return () => clearInterval(interval);
   }, [workflowId]);
 
   const handleTestTrigger = async () => {
-    setTriggering(true);
     try {
+      setTriggering(true);
       await fetch(`/api/workflows/${workflowId}/executions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -61,11 +63,11 @@ export default function ExecutionsPage({ params }: { params: Promise<{ id: strin
   };
 
   const getExplorerLink = (nodeType: string, txHash?: string) => {
-    if (!txHash || txHash.startsWith('0x-manual') || txHash === '0x-send-complete') return null;
-    if (nodeType === 'bridge') {
-      return `https://explorer.solana.com/tx/${txHash}?cluster=devnet`;
+    if (!txHash || txHash.startsWith('0x-manual') || txHash.startsWith('0x-webhook')) return null;
+    if (txHash.startsWith('0x')) {
+      return `https://testnet.arcscan.app/tx/${txHash}`;
     }
-    return `https://testnet.arcscan.app/tx/${txHash}`;
+    return `https://explorer.solana.com/tx/${txHash}?cluster=devnet`;
   };
 
   return (
@@ -98,25 +100,28 @@ export default function ExecutionsPage({ params }: { params: Promise<{ id: strin
             <RefreshCw className="h-4 w-4" />
             Poll Logs
           </button>
-
           <button
             onClick={handleTestTrigger}
             disabled={triggering}
-            className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-600/20 hover:bg-indigo-500 transition-all disabled:opacity-50"
+            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-5 py-2.5 text-xs font-bold text-white shadow-lg shadow-indigo-600/20 hover:from-indigo-500 hover:to-purple-500 transition-all disabled:opacity-50"
           >
-            <Play className="h-4 w-4" />
-            {triggering ? 'Triggering...' : 'Trigger Test Flow (50 USDC)'}
+            {triggering ? (
+              <RefreshCw className="h-4 w-4 animate-spin" />
+            ) : (
+              <Play className="h-4 w-4 fill-white" />
+            )}
+            <span>Trigger Test Flow</span>
           </button>
         </div>
       </div>
 
-      {/* Execution Logs List */}
-      {loading ? (
-        <div className="flex justify-center py-12">
-          <RefreshCw className="h-8 w-8 animate-spin text-indigo-500" />
+      {loading && executions.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 space-y-4">
+          <RefreshCw className="h-8 w-8 text-indigo-500 animate-spin" />
+          <p className="text-xs text-slate-400 font-mono">Loading execution audit trail...</p>
         </div>
       ) : executions.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-900/30 p-12 text-center space-y-4">
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-12 text-center space-y-4">
           <Terminal className="h-12 w-12 text-slate-600 mx-auto" />
           <h3 className="text-lg font-bold text-white">No execution logs found</h3>
           <p className="text-xs text-slate-400 max-w-sm mx-auto">
@@ -135,6 +140,7 @@ export default function ExecutionsPage({ params }: { params: Promise<{ id: strin
           {executions.map((exec) => {
             const isComplete = exec.status === 'COMPLETE';
             const isFailed = exec.status === 'FAILED';
+            const isPartial = exec.status === 'PARTIAL';
             const isRunning = exec.status === 'RUNNING';
 
             return (
@@ -149,12 +155,15 @@ export default function ExecutionsPage({ params }: { params: Promise<{ id: strin
                       className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${
                         isComplete
                           ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                          : isPartial
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                           : isFailed
                           ? 'bg-red-500/20 text-red-300 border border-red-500/30'
                           : 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30'
                       }`}
                     >
                       {isComplete && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />}
+                      {isPartial && <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />}
                       {isFailed && <XCircle className="h-3.5 w-3.5 text-red-400" />}
                       {isRunning && <Clock className="h-3.5 w-3.5 text-yellow-400 animate-spin" />}
                       {exec.status}
@@ -179,8 +188,9 @@ export default function ExecutionsPage({ params }: { params: Promise<{ id: strin
                 <div className="space-y-4 relative pl-4 border-l-2 border-slate-800">
                   {(exec.stepLogs || []).map((step: any, idx: number) => {
                     const stepComplete = step.status === 'COMPLETE';
+                    const stepPartial = step.status === 'PARTIAL';
                     const stepFailed = step.status === 'FAILED';
-                    const stepRunning = step.status === 'RUNNING';
+                    const stepSkipped = step.status === 'SKIPPED';
                     const explorerUrl = getExplorerLink(step.nodeType, step.txHash);
 
                     return (
@@ -190,8 +200,12 @@ export default function ExecutionsPage({ params }: { params: Promise<{ id: strin
                           className={`absolute -left-[23px] top-1 h-3.5 w-3.5 rounded-full border-2 border-slate-900 ${
                             stepComplete
                               ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]'
+                              : stepPartial
+                              ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]'
                               : stepFailed
                               ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]'
+                              : stepSkipped
+                              ? 'bg-slate-600'
                               : 'bg-yellow-400 animate-pulse'
                           }`}
                         />
@@ -203,6 +217,19 @@ export default function ExecutionsPage({ params }: { params: Promise<{ id: strin
                             </span>
                             <span className="rounded-md bg-slate-800 px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider text-slate-400">
                               {step.nodeType}
+                            </span>
+                            <span
+                              className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                                stepComplete
+                                  ? 'bg-emerald-500/10 text-emerald-400'
+                                  : stepPartial
+                                  ? 'bg-amber-500/10 text-amber-400'
+                                  : stepFailed
+                                  ? 'bg-red-500/10 text-red-400'
+                                  : 'bg-slate-800 text-slate-400'
+                              }`}
+                            >
+                              {step.status}
                             </span>
                           </div>
 

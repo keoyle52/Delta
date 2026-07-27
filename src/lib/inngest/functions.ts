@@ -2,284 +2,308 @@ import { inngest } from './client';
 import { prisma } from '@/lib/prisma';
 import { executeAppKitSwap, executeAppKitBridge, executeAppKitSend } from '@/lib/circle/app-kit';
 import { sendArcTransfer } from '@/lib/circle/wallets';
-import axios from 'axios';
 
-export interface StepLog {
-  stepId: string;
-  nodeType: string;
-  nodeName: string;
-  status: 'PENDING' | 'RUNNING' | 'COMPLETE' | 'FAILED';
-  txHash?: string;
-  details?: string;
-  error?: string;
-  timestamp: string;
-}
-
+/**
+ * Inngest Durable Workflow Execution Function
+ */
 export const executeWorkflowFunction = inngest.createFunction(
-  { id: 'execute-delta-workflow', name: 'Execute Delta Flow Automation' },
+  {
+    id: 'execute-workflow',
+    name: 'Execute Visual Workflow Automation',
+    concurrency: {
+      limit: 5,
+    },
+    retries: 2,
+  },
   { event: 'workflow.trigger' },
   async ({ event, step }) => {
-    const { workflowId, executionId, triggerTxHash, triggerAmount, walletAddress, walletId } = event.data;
+    const { workflowId, triggerTxHash, triggerAmount, walletAddress, walletId } = event.data;
 
-    // Step 1: Initialize Execution in DB
-    const currentExecution = await step.run('init-execution-db', async () => {
-      let exec = executionId
-        ? await prisma.execution.findUnique({ where: { id: executionId } })
-        : null;
-
-      if (!exec) {
-        exec = await prisma.execution.create({
-          data: {
-            workflowId,
-            triggerTxHash: triggerTxHash || '0x0000000000000000000000000000000000000000',
-            triggerAmount: String(triggerAmount),
-            status: 'RUNNING',
-            stepLogs: [],
-            startedAt: new Date(),
-          },
-        });
-      } else {
-        await prisma.execution.update({
-          where: { id: exec.id },
-          data: { status: 'RUNNING' },
-        });
-      }
-
-      return exec;
-    });
-
-    const stepLogs: StepLog[] = [];
-
-    // Helper to log step execution to array and DB
-    const updateLog = async (logEntry: StepLog) => {
-      const idx = stepLogs.findIndex((s) => s.stepId === logEntry.stepId);
-      if (idx >= 0) {
-        stepLogs[idx] = logEntry;
-      } else {
-        stepLogs.push(logEntry);
-      }
-
-      await prisma.execution.update({
-        where: { id: currentExecution.id },
-        data: {
-          stepLogs: stepLogs as any,
-        },
-      });
-    };
-
-    // Step 2: Fetch Workflow structure
+    // 1. Fetch workflow and user details
     const workflow = await step.run('fetch-workflow', async () => {
-      const wf = await prisma.workflow.findUnique({
+      return await prisma.workflow.findUnique({
         where: { id: workflowId },
       });
-      if (!wf) throw new Error(`Workflow ${workflowId} not found`);
-      return wf;
     });
 
-    const nodes = typeof workflow.nodes === 'string' ? JSON.parse(workflow.nodes) : (workflow.nodes || []);
-    const edges = typeof workflow.edges === 'string' ? JSON.parse(workflow.edges) : (workflow.edges || []);
-
-    const triggerNode = nodes.find((n: any) => n.type === 'trigger');
-    if (!triggerNode) {
-      await updateLog({
-        stepId: 'trigger-check',
-        nodeType: 'trigger',
-        nodeName: 'Trigger Check',
-        status: 'FAILED',
-        error: 'No trigger node found in workflow definition',
-        timestamp: new Date().toISOString(),
-      });
-      await prisma.execution.update({
-        where: { id: currentExecution.id },
-        data: { status: 'FAILED', finishedAt: new Date() },
-      });
-      return { success: false, reason: 'No trigger node' };
+    if (!workflow || !workflow.isActive) {
+      return { status: 'SKIPPED', reason: 'Workflow not found or inactive' };
     }
 
-    // Record trigger step completion
-    await updateLog({
-      stepId: triggerNode.id,
-      nodeType: 'trigger',
-      nodeName: triggerNode.data?.label || 'USDC Received',
-      status: 'COMPLETE',
-      txHash: triggerTxHash,
-      details: `Triggered by inbound transfer of ${triggerAmount} USDC (Tx: ${triggerTxHash})`,
-      timestamp: new Date().toISOString(),
+    const nodes = typeof workflow.nodes === 'string' ? JSON.parse(workflow.nodes) : (workflow.nodes || []);
+    const triggerNode = nodes.find((n: any) => n.type === 'trigger');
+
+    // 2. Initialize execution record
+    const execution = await step.run('create-execution-record', async () => {
+      return await prisma.execution.create({
+        data: {
+          workflowId,
+          triggerTxHash,
+          triggerAmount,
+          status: 'RUNNING',
+          stepLogs: [
+            {
+              stepId: triggerNode?.id || 'trigger-1',
+              nodeType: 'trigger',
+              nodeName: triggerNode?.data?.label || 'USDC Received',
+              status: 'COMPLETE',
+              txHash: triggerTxHash,
+              details: `Triggered by transfer of ${triggerAmount} USDC`,
+              timestamp: new Date().toISOString(),
+            },
+          ],
+          startedAt: new Date(),
+        },
+      });
     });
 
-    // Step 3: Find downstream action nodes
-    const outgoingEdges = edges.filter((e: any) => e.source === triggerNode.id);
-    const targetNodeIds = outgoingEdges.map((e: any) => e.target);
-    const actionNodes = nodes.filter((n: any) => targetNodeIds.includes(n.id));
+    const actionNodes = nodes.filter((n: any) => n.type !== 'trigger');
+    const totalAmount = parseFloat(triggerAmount);
 
-    const totalTriggerAmount = parseFloat(triggerAmount);
-
-    // Step 4: Execute each action sequentially
-    let hasFailedStep = false;
-
+    // 3. Process action nodes sequentially
     for (const node of actionNodes) {
-      const stepId = node.id;
-      const nodeType = node.type;
-      const nodeData = node.data || {};
-      const percentage = parseFloat(nodeData.percentage || '0');
-      const actionAmount = ((totalTriggerAmount * percentage) / 100).toFixed(6);
+      await step.run(`execute-node-${node.id}`, async () => {
+        const percentage = parseFloat(node.data?.percentage || '40');
+        const actionAmount = ((totalAmount * percentage) / 100).toFixed(6);
 
-      await updateLog({
-        stepId,
-        nodeType,
-        nodeName: nodeData.label || nodeType.toUpperCase(),
-        status: 'RUNNING',
-        details: `Executing ${nodeType} with ${percentage}% (${actionAmount} USDC)...`,
-        timestamp: new Date().toISOString(),
-      });
+        const currentExecution = await prisma.execution.findUnique({
+          where: { id: execution.id },
+        });
 
-      try {
-        if (nodeType === 'swap') {
-          const tokenOut = nodeData.tokenOut || 'EURC';
-          let txResult: any;
+        const logs = typeof currentExecution?.stepLogs === 'string'
+          ? JSON.parse(currentExecution.stepLogs)
+          : (currentExecution?.stepLogs || []);
 
-          if (process.env.CIRCLE_API_KEY && process.env.CIRCLE_ENTITY_SECRET) {
-            txResult = await executeAppKitSwap({
-              userWalletAddress: walletAddress,
-              walletId,
-              amountUsdc: actionAmount,
-              tokenOut,
-            });
-          } else {
-            throw new Error('CIRCLE_API_KEY / CIRCLE_ENTITY_SECRET missing in environment');
-          }
+        const updateLog = async (logEntry: any) => {
+          logs.push(logEntry);
+          await prisma.execution.update({
+            where: { id: execution.id },
+            data: { stepLogs: logs as any },
+          });
+        };
 
+        if (parseFloat(actionAmount) <= 0) {
           await updateLog({
-            stepId,
-            nodeType,
-            nodeName: nodeData.label || 'Swap Action',
-            status: 'COMPLETE',
-            txHash: txResult?.txHash || txResult?.id || '0x-swap-completed',
-            details: `Swapped ${actionAmount} USDC to ${tokenOut} on Arc Testnet`,
+            stepId: node.id,
+            nodeType: node.type,
+            nodeName: node.data?.label || node.type.toUpperCase(),
+            status: 'SKIPPED',
+            details: `Skipped action: percentage is 0 or allocation amount is ${actionAmount} USDC`,
             timestamp: new Date().toISOString(),
           });
-        } else if (nodeType === 'bridge') {
-          const destinationAddress = nodeData.destinationAddress;
-          if (!destinationAddress) {
-            throw new Error('Bridge node destinationAddress is required');
-          }
+          return;
+        }
 
-          let txResult: any;
-          if (process.env.CIRCLE_API_KEY && process.env.CIRCLE_ENTITY_SECRET) {
-            txResult = await executeAppKitBridge({
-              userWalletAddress: walletAddress,
-              destinationAddress,
-              amountUsdc: actionAmount,
-            });
-          } else {
-            throw new Error('CIRCLE_API_KEY / CIRCLE_ENTITY_SECRET missing in environment');
-          }
+        const nodeType = node.type;
+        const nodeData = node.data || {};
 
-          await updateLog({
-            stepId,
-            nodeType,
-            nodeName: nodeData.label || 'Bridge Action',
-            status: 'COMPLETE',
-            txHash: txResult?.txHash || txResult?.id || '0x-bridge-cctp-initiated',
-            details: `Bridged ${actionAmount} USDC via CCTP to Solana Devnet recipient: ${destinationAddress}`,
-            timestamp: new Date().toISOString(),
-          });
-        } else if (nodeType === 'send') {
-          const destinationAddress = nodeData.destinationAddress;
-          if (!destinationAddress) {
-            throw new Error('Send node destinationAddress is required');
-          }
+        try {
+          if (nodeType === 'swap') {
+            const tokenOut = nodeData.tokenOut || 'EURC';
+            let txResult: any;
 
-          let txHash = '';
-          if (process.env.CIRCLE_API_KEY && process.env.CIRCLE_ENTITY_SECRET) {
-            try {
-              const res: any = await executeAppKitSend({
+            if (process.env.CIRCLE_API_KEY && process.env.CIRCLE_ENTITY_SECRET) {
+              txResult = await executeAppKitSwap({
+                userWalletAddress: walletAddress,
+                walletId,
+                amountUsdc: actionAmount,
+                tokenOut,
+              });
+            } else {
+              throw new Error('CIRCLE_API_KEY / CIRCLE_ENTITY_SECRET missing in environment');
+            }
+
+            const realTxHash = txResult?.txHash || txResult?.id || txResult?.transactionHash || txResult?.steps?.find((s: any) => s.txHash)?.txHash;
+
+            if (!realTxHash) {
+              await updateLog({
+                stepId: node.id,
+                nodeType: 'swap',
+                nodeName: nodeData.label || 'Swap Action',
+                status: 'FAILED',
+                error: `Swap failed: no valid transaction hash returned from Circle App Kit. State: ${txResult?.state || 'unknown'}`,
+                timestamp: new Date().toISOString(),
+              });
+            } else {
+              await updateLog({
+                stepId: node.id,
+                nodeType: 'swap',
+                nodeName: nodeData.label || 'Swap Action',
+                status: 'COMPLETE',
+                txHash: realTxHash,
+                details: `Swapped ${actionAmount} USDC to ${tokenOut} on Arc Testnet`,
+                timestamp: new Date().toISOString(),
+              });
+            }
+          } else if (nodeType === 'bridge') {
+            const destinationAddress = nodeData.destinationAddress;
+            if (!destinationAddress) {
+              throw new Error('Bridge node destinationAddress is required');
+            }
+
+            let txResult: any;
+            if (process.env.CIRCLE_API_KEY && process.env.CIRCLE_ENTITY_SECRET) {
+              txResult = await executeAppKitBridge({
                 userWalletAddress: walletAddress,
                 destinationAddress,
                 amountUsdc: actionAmount,
               });
-              txHash = res?.txHash || res?.id || '';
-            } catch (appKitErr) {
-              // Fallback to Developer Controlled Wallet transfer API if direct App Kit send adapter is busy
-              txHash = (await sendArcTransfer({
-                walletId,
-                destinationAddress,
-                amountUsdc: actionAmount,
-              })) || '';
+            } else {
+              throw new Error('CIRCLE_API_KEY / CIRCLE_ENTITY_SECRET missing in environment');
             }
-          } else {
-            throw new Error('CIRCLE_API_KEY / CIRCLE_ENTITY_SECRET missing in environment');
-          }
 
-          await updateLog({
-            stepId,
-            nodeType,
-            nodeName: nodeData.label || 'Send Action',
-            status: 'COMPLETE',
-            txHash: txHash || '0x-send-complete',
-            details: `Sent ${actionAmount} USDC to ${destinationAddress} on Arc Testnet`,
-            timestamp: new Date().toISOString(),
-          });
-        } else if (nodeType === 'notify') {
-          const webhookUrl = nodeData.webhookUrl;
-          const template = nodeData.template || 'Delta Alert: {{amount}} USDC processed. Tx: {{txHash}}';
+            const burnStep = txResult?.steps?.find((s: any) => s.name === 'burn');
+            const mintStep = txResult?.steps?.find((s: any) => s.name === 'mint');
+            const realTxHash = burnStep?.txHash || txResult?.txHash || txResult?.steps?.find((s: any) => s.txHash)?.txHash;
 
-          let message = template
-            .replace('{{amount}}', triggerAmount)
-            .replace('{{txHash}}', triggerTxHash)
-            .replace('{{step}}', nodeData.label || 'Automation');
+            if (!realTxHash) {
+              await updateLog({
+                stepId: node.id,
+                nodeType: 'bridge',
+                nodeName: nodeData.label || 'CCTP Bridge Action',
+                status: 'FAILED',
+                error: `Bridge failed: no valid burn transaction hash returned on Arc Testnet. State: ${txResult?.state || 'unknown'}`,
+                timestamp: new Date().toISOString(),
+              });
+            } else if (mintStep?.state !== 'success') {
+              await updateLog({
+                stepId: node.id,
+                nodeType: 'bridge',
+                nodeName: nodeData.label || 'CCTP Bridge Action',
+                status: 'PARTIAL',
+                txHash: realTxHash,
+                details: `Burn succeeded on Arc Testnet (source chain), but mint on Solana Devnet did not complete (relayer/attestation pending or failed).`,
+                timestamp: new Date().toISOString(),
+              });
+            } else {
+              const mintTxHash = mintStep?.txHash || realTxHash;
+              await updateLog({
+                stepId: node.id,
+                nodeType: 'bridge',
+                nodeName: nodeData.label || 'CCTP Bridge Action',
+                status: 'COMPLETE',
+                txHash: mintTxHash,
+                details: `Bridged ${actionAmount} USDC via CCTP to Solana Devnet recipient: ${destinationAddress}`,
+                timestamp: new Date().toISOString(),
+              });
+            }
+          } else if (nodeType === 'send') {
+            const destinationAddress = nodeData.destinationAddress;
+            if (!destinationAddress) {
+              throw new Error('Send node destinationAddress is required');
+            }
 
-          if (webhookUrl && webhookUrl.startsWith('http')) {
-            await axios.post(webhookUrl, {
-              content: message,
-              text: message,
-              workflowId,
-              txHash: triggerTxHash,
+            let realTxHash = '';
+            if (process.env.CIRCLE_API_KEY && process.env.CIRCLE_ENTITY_SECRET) {
+              try {
+                const res: any = await executeAppKitSend({
+                  userWalletAddress: walletAddress,
+                  destinationAddress,
+                  amountUsdc: actionAmount,
+                });
+                realTxHash = res?.txHash || res?.id || res?.transactionHash || res?.steps?.find((s: any) => s.txHash)?.txHash || '';
+              } catch (appKitErr) {
+                // Fallback to Developer Controlled Wallet transfer API if direct App Kit send adapter is busy
+                realTxHash = (await sendArcTransfer({
+                  walletId,
+                  destinationAddress,
+                  amountUsdc: actionAmount,
+                })) || '';
+              }
+            } else {
+              throw new Error('CIRCLE_API_KEY / CIRCLE_ENTITY_SECRET missing in environment');
+            }
+
+            if (!realTxHash) {
+              await updateLog({
+                stepId: node.id,
+                nodeType: 'send',
+                nodeName: nodeData.label || 'Send Action',
+                status: 'FAILED',
+                error: `Send failed: no valid transaction hash returned from Circle App Kit.`,
+                timestamp: new Date().toISOString(),
+              });
+            } else {
+              await updateLog({
+                stepId: node.id,
+                nodeType: 'send',
+                nodeName: nodeData.label || 'Send Action',
+                status: 'COMPLETE',
+                txHash: realTxHash,
+                details: `Sent ${actionAmount} USDC to ${destinationAddress} on Arc Testnet`,
+                timestamp: new Date().toISOString(),
+              });
+            }
+          } else if (nodeType === 'notify') {
+            const webhookUrl = nodeData.webhookUrl;
+            const template = nodeData.template || 'Delta Alert: {{amount}} USDC processed. Tx: {{txHash}}';
+
+            let message = template
+              .replace('{{amount}}', triggerAmount)
+              .replace('{{txHash}}', triggerTxHash)
+              .replace('{{step}}', nodeData.label || 'Automation');
+
+            if (webhookUrl) {
+              try {
+                await fetch(webhookUrl, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    event: 'workflow.step.executed',
+                    workflowId,
+                    message,
+                    amount: actionAmount,
+                    txHash: triggerTxHash,
+                  }),
+                });
+              } catch (webhookErr: any) {
+                console.warn('Webhook notification dispatch error:', webhookErr.message);
+              }
+            }
+
+            await updateLog({
+              stepId: node.id,
+              nodeType: 'notify',
+              nodeName: nodeData.label || 'Log Notification',
+              status: 'COMPLETE',
+              details: `Sent webhook alert: "${message}"`,
+              timestamp: new Date().toISOString(),
             });
           }
-
+        } catch (err: any) {
           await updateLog({
-            stepId,
-            nodeType,
-            nodeName: nodeData.label || 'Notify Action',
-            status: 'COMPLETE',
-            details: `Notification sent: "${message}"`,
-            timestamp: new Date().toISOString(),
-          });
-        } else if (nodeType === 'hold') {
-          await updateLog({
-            stepId,
-            nodeType,
-            nodeName: nodeData.label || 'Hold Action',
-            status: 'COMPLETE',
-            details: `Retained ${percentage}% (${actionAmount} USDC) safely in user wallet on Arc Testnet`,
+            stepId: node.id,
+            nodeType: node.type,
+            nodeName: nodeData.label || node.type.toUpperCase(),
+            status: 'FAILED',
+            error: err.message || String(err),
             timestamp: new Date().toISOString(),
           });
         }
-      } catch (err: any) {
-        hasFailedStep = true;
-        await updateLog({
-          stepId,
-          nodeType,
-          nodeName: nodeData.label || nodeType.toUpperCase(),
-          status: 'FAILED',
-          error: err.message || String(err),
-          timestamp: new Date().toISOString(),
-        });
-        break; // Stop remaining steps on failure
-      }
+      });
     }
 
-    // Step 5: Finalize Execution status
-    const finalStatus = hasFailedStep ? 'FAILED' : 'COMPLETE';
-    await prisma.execution.update({
-      where: { id: currentExecution.id },
-      data: {
-        status: finalStatus,
-        finishedAt: new Date(),
-      },
+    // 4. Mark execution complete
+    await step.run('finalize-execution', async () => {
+      const finalExecution = await prisma.execution.findUnique({
+        where: { id: execution.id },
+      });
+
+      const logs = typeof finalExecution?.stepLogs === 'string'
+        ? JSON.parse(finalExecution.stepLogs)
+        : (finalExecution?.stepLogs || []);
+
+      const hasFailed = logs.some((s: any) => s.status === 'FAILED');
+
+      await prisma.execution.update({
+        where: { id: execution.id },
+        data: {
+          status: hasFailed ? 'FAILED' : 'COMPLETE',
+          finishedAt: new Date(),
+        },
+      });
     });
 
-    return { executionId: currentExecution.id, status: finalStatus };
+    return { status: 'SUCCESS', executionId: execution.id };
   }
 );

@@ -246,15 +246,28 @@ async function executeWorkflowDirectly({
           tokenOut,
         });
 
-        stepLogs.push({
-          stepId: node.id,
-          nodeType: 'swap',
-          nodeName: node.data?.label || 'Swap Action',
-          status: 'COMPLETE',
-          txHash: res?.txHash || res?.id || '0x-swap-complete',
-          details: `Swapped ${actionAmount} USDC to ${tokenOut}`,
-          timestamp: new Date().toISOString(),
-        });
+        const realTxHash = res?.txHash || res?.id || res?.transactionHash || res?.steps?.find((s: any) => s.txHash)?.txHash;
+
+        if (!realTxHash) {
+          stepLogs.push({
+            stepId: node.id,
+            nodeType: 'swap',
+            nodeName: node.data?.label || 'Swap Action',
+            status: 'FAILED',
+            error: `Swap failed: no valid transaction hash returned from Circle App Kit. State: ${res?.state || 'unknown'}`,
+            timestamp: new Date().toISOString(),
+          });
+        } else {
+          stepLogs.push({
+            stepId: node.id,
+            nodeType: 'swap',
+            nodeName: node.data?.label || 'Swap Action',
+            status: 'COMPLETE',
+            txHash: realTxHash,
+            details: `Swapped ${actionAmount} USDC to ${tokenOut}`,
+            timestamp: new Date().toISOString(),
+          });
+        }
       } else if (node.type === 'bridge') {
         const destinationAddress = node.data?.destinationAddress;
         if (!destinationAddress || destinationAddress.length < 32) {
@@ -267,15 +280,41 @@ async function executeWorkflowDirectly({
           amountUsdc: actionAmount,
         });
 
-        stepLogs.push({
-          stepId: node.id,
-          nodeType: 'bridge',
-          nodeName: node.data?.label || 'Bridge Action',
-          status: 'COMPLETE',
-          txHash: res?.txHash || res?.id || '0x-bridge-complete',
-          details: `Bridged ${actionAmount} USDC to Solana Devnet`,
-          timestamp: new Date().toISOString(),
-        });
+        const burnStep = res?.steps?.find((s: any) => s.name === 'burn');
+        const mintStep = res?.steps?.find((s: any) => s.name === 'mint');
+        const realTxHash = burnStep?.txHash || res?.txHash || res?.steps?.find((s: any) => s.txHash)?.txHash;
+
+        if (!realTxHash) {
+          stepLogs.push({
+            stepId: node.id,
+            nodeType: 'bridge',
+            nodeName: node.data?.label || 'CCTP Bridge Action',
+            status: 'FAILED',
+            error: `Bridge failed: no valid burn transaction hash returned on Arc Testnet. State: ${res?.state || 'unknown'}`,
+            timestamp: new Date().toISOString(),
+          });
+        } else if (mintStep?.state !== 'success') {
+          stepLogs.push({
+            stepId: node.id,
+            nodeType: 'bridge',
+            nodeName: node.data?.label || 'CCTP Bridge Action',
+            status: 'PARTIAL',
+            txHash: realTxHash,
+            details: `Burn succeeded on Arc Testnet (source chain), but mint on Solana Devnet did not complete (relayer/attestation pending or failed).`,
+            timestamp: new Date().toISOString(),
+          });
+        } else {
+          const mintTxHash = mintStep?.txHash || realTxHash;
+          stepLogs.push({
+            stepId: node.id,
+            nodeType: 'bridge',
+            nodeName: node.data?.label || 'CCTP Bridge Action',
+            status: 'COMPLETE',
+            txHash: mintTxHash,
+            details: `Bridged ${actionAmount} USDC to Solana Devnet successfully.`,
+            timestamp: new Date().toISOString(),
+          });
+        }
       } else if (node.type === 'send') {
         const destinationAddress = node.data?.destinationAddress;
         if (!destinationAddress || !destinationAddress.startsWith('0x')) {
@@ -288,15 +327,28 @@ async function executeWorkflowDirectly({
           amountUsdc: actionAmount,
         });
 
-        stepLogs.push({
-          stepId: node.id,
-          nodeType: 'send',
-          nodeName: node.data?.label || 'Send Action',
-          status: 'COMPLETE',
-          txHash: res?.txHash || res?.id || '0x-send-complete',
-          details: `Sent ${actionAmount} USDC to ${destinationAddress}`,
-          timestamp: new Date().toISOString(),
-        });
+        const realTxHash = res?.txHash || res?.id || res?.transactionHash || res?.steps?.find((s: any) => s.txHash)?.txHash;
+
+        if (!realTxHash) {
+          stepLogs.push({
+            stepId: node.id,
+            nodeType: 'send',
+            nodeName: node.data?.label || 'Send Action',
+            status: 'FAILED',
+            error: `Send failed: no valid transaction hash returned from Circle App Kit. State: ${res?.state || 'unknown'}`,
+            timestamp: new Date().toISOString(),
+          });
+        } else {
+          stepLogs.push({
+            stepId: node.id,
+            nodeType: 'send',
+            nodeName: node.data?.label || 'Send Action',
+            status: 'COMPLETE',
+            txHash: realTxHash,
+            details: `Sent ${actionAmount} USDC to ${destinationAddress}`,
+            timestamp: new Date().toISOString(),
+          });
+        }
       } else if (node.type === 'hold') {
         stepLogs.push({
           stepId: node.id,
