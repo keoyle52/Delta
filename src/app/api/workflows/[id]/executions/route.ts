@@ -69,7 +69,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const walletAddress = userWithWallet.wallet.address;
 
-    // FIX C: Balance validation before test execution
+    // Balance validation before test execution
     try {
       const realBalances = await getWalletBalances(walletAddress);
       const availableUsdc = parseFloat(realBalances.usdc || '0');
@@ -218,8 +218,23 @@ async function executeWorkflowDirectly({
   let hasNotifyNode = false;
 
   for (const node of actionNodes) {
-    const percentage = parseFloat(node.data?.percentage || '0');
+    const percentage = parseFloat(node.data?.percentage || '40');
     const actionAmount = ((totalAmount * percentage) / 100).toFixed(6);
+
+    console.error(`[AMOUNT DEBUG] Node ${node.id} (${node.type}): raw percentage data = ${JSON.stringify(node.data?.percentage)}, parsed = ${percentage}, totalAmount = ${totalAmount}, actionAmount = ${actionAmount}`);
+
+    if (parseFloat(actionAmount) <= 0) {
+      stepLogs.push({
+        stepId: node.id,
+        nodeType: node.type,
+        nodeName: node.data?.label || node.type.toUpperCase(),
+        status: 'SKIPPED',
+        details: `Skipped action: percentage is 0 or allocation amount is ${actionAmount} USDC`,
+        timestamp: new Date().toISOString(),
+      });
+      await updateExecutionLogs();
+      continue;
+    }
 
     try {
       if (node.type === 'swap') {
