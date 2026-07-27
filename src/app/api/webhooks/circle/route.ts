@@ -81,6 +81,14 @@ export async function POST(req: NextRequest) {
         ''
       ).toLowerCase();
 
+      const sourceAddress = (
+        eventData.sourceAddress ||
+        eventData.from ||
+        eventData.sender ||
+        eventData.fromAddress ||
+        ''
+      ).toLowerCase();
+
       const walletId = eventData.walletId || '';
       const amounts = eventData.amounts || [eventData.amount || '0'];
       const transferAmountStr = String(amounts[0] || '0');
@@ -100,6 +108,7 @@ export async function POST(req: NextRequest) {
       console.log('[DEBUG WEBHOOK] Matched INBOUND USDC payload fields:');
       console.log('   walletId:', walletId);
       console.log('   destinationAddress:', destinationAddress);
+      console.log('   sourceAddress:', sourceAddress);
       console.log('   transferAmountStr:', transferAmountStr);
 
       if ((transferState === 'COMPLETE' || transferState === 'SUCCESS' || transferState === 'CONFIRMED')) {
@@ -123,22 +132,29 @@ export async function POST(req: NextRequest) {
         });
 
         if (wallet && wallet.user && wallet.user.workflows.length > 0) {
+          // FIX D: IGNORE SENDER IF IT MATCHES USER'S OWN CUSTODIAL WALLET OR ADAPTER
+          const userWalletAddr = wallet.address.toLowerCase();
+          if (sourceAddress && (sourceAddress === userWalletAddr || sourceAddress === destinationAddress)) {
+            console.log(`[DEBUG WEBHOOK] Ignored transfer originating from user's own wallet/adapter (${sourceAddress})`);
+            return NextResponse.json({ success: true, message: 'Ignored internal wallet/adapter transfer' });
+          }
+
           console.log(`[DEBUG WEBHOOK] Found Wallet in DB! Address: ${wallet.address} | Workflows: ${wallet.user.workflows.length}`);
           let triggeredCount = 0;
 
           for (const workflow of wallet.user.workflows) {
-            // FIX D: 30-SECOND WORKFLOW COOLDOWN GUARD (Prevents rapid loop re-triggers)
+            // FIX E: 120-SECOND WORKFLOW COOLDOWN GUARD (Prevents rapid loop re-triggers)
             const recentExecution = await prisma.execution.findFirst({
               where: {
                 workflowId: workflow.id,
                 startedAt: {
-                  gt: new Date(Date.now() - 30 * 1000), // 30 second cooldown
+                  gt: new Date(Date.now() - 120 * 1000), // 120 second cooldown guard
                 },
               },
             });
 
             if (recentExecution) {
-              console.log(`[DEBUG WEBHOOK] Workflow ${workflow.id} is on 30s cooldown. Skipping trigger.`);
+              console.log(`[DEBUG WEBHOOK] Workflow ${workflow.id} is on 120s cooldown. Skipping trigger.`);
               continue;
             }
 
