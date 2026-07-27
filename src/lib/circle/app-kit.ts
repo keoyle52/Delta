@@ -96,7 +96,7 @@ export async function executeAppKitBridge({
     }
 
     // 2. Perform CCTP bridge call with forwarder-based destination (useForwarder: true is mandatory)
-    const bridgeResult = await kit.bridge({
+    const bridgeResult: any = await kit.bridge({
       from: {
         adapter: circleWalletsAdapter,
         chain: 'Arc_Testnet',
@@ -118,16 +118,18 @@ export async function executeAppKitBridge({
 }
 
 /**
- * Execute Same-chain USDC Transfer on Arc Testnet
+ * Execute Same-chain Token Transfer on Arc Testnet (USDC / EURC)
  */
 export async function executeAppKitSend({
   userWalletAddress,
   destinationAddress,
   amountUsdc,
+  token = 'USDC',
 }: {
   userWalletAddress: string;
   destinationAddress: string;
   amountUsdc: string;
+  token?: 'USDC' | 'EURC';
 }) {
   const kit = getAppKitInstance();
   const circleWalletsAdapter = getCircleWalletsAdapter();
@@ -140,7 +142,7 @@ export async function executeAppKitSend({
         address: userWalletAddress,
       },
       to: destinationAddress,
-      token: 'USDC',
+      token: token as 'USDC' | 'EURC',
       amount: amountUsdc,
     });
 

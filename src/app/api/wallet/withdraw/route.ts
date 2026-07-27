@@ -42,6 +42,7 @@ export async function POST(req: NextRequest) {
 
     const wallet = userWithWallet.wallet;
     const amountStr = withdrawAmountNum.toFixed(6);
+    const targetToken = (token === 'EURC' ? 'EURC' : 'USDC') as 'USDC' | 'EURC';
 
     let txHash = '';
     try {
@@ -49,21 +50,23 @@ export async function POST(req: NextRequest) {
         userWalletAddress: wallet.address,
         destinationAddress,
         amountUsdc: amountStr,
+        token: targetToken,
       });
       txHash = res?.txHash || res?.id || '';
     } catch (appKitErr: any) {
-      console.warn('App Kit send fallback to Developer-Controlled Wallet API:', appKitErr.message);
+      console.warn(`App Kit ${targetToken} send fallback to Developer-Controlled Wallet API:`, appKitErr.message);
       const fallbackTxId = await sendArcTransfer({
         walletId: wallet.circleWalletId,
         destinationAddress,
         amountUsdc: amountStr,
+        tokenId: targetToken === 'EURC' ? process.env.CIRCLE_EURC_TOKEN_ID : undefined,
       });
       txHash = fallbackTxId || '';
     }
 
     return NextResponse.json({
       success: true,
-      message: `Successfully transferred ${amountStr} ${token} to ${destinationAddress}`,
+      message: `Successfully transferred ${amountStr} ${targetToken} to ${destinationAddress}`,
       txHash: txHash || '0x-withdraw-complete',
       explorerUrl: txHash ? `https://testnet.arcscan.app/tx/${txHash}` : null,
     });

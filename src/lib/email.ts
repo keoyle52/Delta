@@ -12,7 +12,8 @@ export async function sendResendEmail({
   html: string;
 }) {
   const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.EMAIL_FROM || 'Delta Automation <onboarding@resend.dev>';
+  // Standard free tier Resend domain must be onboarding@resend.dev unless custom domain is verified
+  const from = process.env.EMAIL_FROM || 'onboarding@resend.dev';
 
   if (!apiKey || apiKey.trim() === '') {
     console.warn('RESEND_API_KEY is not configured; skipping email dispatch.');
@@ -35,7 +36,11 @@ export async function sendResendEmail({
     });
 
     const data = await res.json();
-    console.log(`✉️ Resend Email Sent to ${to}:`, data.id || JSON.stringify(data));
+    if (res.ok && data.id) {
+      console.log(`✉️ Resend Email Successfully Delivered to ${to}: ID=${data.id}`);
+    } else {
+      console.warn(`⚠️ Resend Email Warning for ${to}:`, JSON.stringify(data));
+    }
     return data;
   } catch (err: any) {
     console.error('Failed to send Resend email:', err.message || err);
@@ -47,6 +52,8 @@ export async function sendResendEmail({
  * Send OTP Verification Code Email for Passwordless Login
  */
 export async function sendOtpEmail({ to, code }: { to: string; code: string }) {
+  console.log(`🔑 [SECURITY OTP LOG] Verification Code for ${to} is: ${code}`);
+
   const subject = `[Delta] Your Login Verification Code: ${code}`;
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #090d16; color: #f8fafc; padding: 40px 20px; border-radius: 16px; max-width: 500px; margin: 0 auto;">

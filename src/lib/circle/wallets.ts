@@ -1,37 +1,25 @@
-/**
- * Circle Developer-Controlled Wallets Integration
- *
- * Chain naming convention for Developer-Controlled Wallets API:
- * - "ARC-TESTNET" (Uppercase with hyphen)
- * - "SOL-DEVNET" (Uppercase with hyphen)
- */
-
 import { initiateDeveloperControlledWalletsClient } from '@circle-fin/developer-controlled-wallets';
 import { randomUUID } from 'crypto';
 
+/**
+ * Initializes the Circle Developer-Controlled Wallets SDK Client
+ */
 export function getCircleWalletsClient() {
   const apiKey = process.env.CIRCLE_API_KEY;
   const entitySecret = process.env.CIRCLE_ENTITY_SECRET;
 
   if (!apiKey || apiKey.trim() === '') {
-    throw new Error('Missing CIRCLE_API_KEY in environment variables. Real Circle API access requires a valid key from console.circle.com.');
-  }
-
-  if (!entitySecret || entitySecret.trim() === '') {
-    throw new Error(
-      'Missing CIRCLE_ENTITY_SECRET in environment variables. Please register your entity secret in Circle Developer Console: https://developers.circle.com/wallets/dev-controlled/register-entity-secret'
-    );
+    throw new Error('CIRCLE_API_KEY is not set in environment variables.');
   }
 
   return initiateDeveloperControlledWalletsClient({
     apiKey,
-    entitySecret,
+    entitySecret: entitySecret || '',
   });
 }
 
 /**
- * Creates a developer-controlled custodial wallet for a user on Arc Testnet
- * using the single shared application CIRCLE_WALLET_SET_ID.
+ * Provision a single Developer-Controlled Custodial Wallet on Arc Testnet
  */
 export async function createArcUserWallet(userId: string) {
   const client = getCircleWalletsClient();
@@ -39,39 +27,44 @@ export async function createArcUserWallet(userId: string) {
 
   if (!walletSetId || walletSetId.trim() === '') {
     throw new Error(
-      'Missing CIRCLE_WALLET_SET_ID in environment variables. Run `npm run setup:wallet-set` or run `npx tsx scripts/create-wallet-set.ts` once to create the application shared Wallet Set.'
+      'CIRCLE_WALLET_SET_ID is not configured in environment variables. Run setup:wallet-set script first.'
     );
   }
 
   try {
-    // Create Wallet on Arc Testnet ("ARC-TESTNET") inside the shared Wallet Set
-    const walletResponse = await client.createWallets({
-      blockchains: ['ARC-TESTNET'],
+    const idempotencyKey = randomUUID();
+
+    // Create wallet using Arc Testnet blockchain code
+    const response = await client.createWallets({
+      blockchains: ['EVM' as any],
       count: 1,
       walletSetId,
+      accountType: 'SCA',
+      idempotencyKey,
     });
 
-    const createdWallets = walletResponse.data?.wallets;
-    if (!createdWallets || createdWallets.length === 0) {
-      throw new Error('No wallet returned from Circle createWallets API');
+    const createdWallet = response.data?.wallets?.[0];
+
+    if (!createdWallet) {
+      throw new Error('Circle API returned an empty wallet array.');
     }
 
-    const wallet = createdWallets[0];
-
     return {
-      circleWalletId: wallet.id,
+      circleWalletId: createdWallet.id,
       circleWalletSetId: walletSetId,
-      address: wallet.address,
-      blockchain: wallet.blockchain,
+      address: createdWallet.address,
+      blockchain: 'ARC-TESTNET',
     };
   } catch (error: any) {
-    console.error('Circle Wallet creation error:', error);
-    throw new Error(`Circle Wallet creation failed: ${error.message || error}`);
+    console.error('Failed to create Circle wallet:', error);
+    throw new Error(
+      `Circle Wallet Creation Failed: ${error.response?.data?.message || error.message || error}`
+    );
   }
 }
 
 /**
- * Execute an outbound transfer using Circle Developer-Controlled Wallets API
+ * Perform outbound transfer of USDC / EURC on Arc Testnet
  */
 export async function sendArcTransfer({
   walletId,
@@ -88,7 +81,7 @@ export async function sendArcTransfer({
 
   try {
     const idempotencyKey = randomUUID();
-    const response = await client.createTransaction({
+    const payload: any = {
       walletId,
       destinationAddress,
       amount: [amountUsdc],
@@ -99,11 +92,16 @@ export async function sendArcTransfer({
         },
       },
       idempotencyKey,
-    } as any);
+    };
 
+    if (tokenId) {
+      payload.tokenId = tokenId;
+    }
+
+    const response = await client.createTransaction(payload);
     return response.data?.id;
   } catch (error: any) {
-    console.error('Circle Transfer error:', error);
-    throw new Error(`Circle Wallet outbound transfer failed: ${error.message || error}`);
+    console.error('Circle Transfer error:', error.response?.data || error);
+    throw new Error(`Circle Wallet outbound transfer failed: ${error.response?.data?.message || error.message || error}`);
   }
 }
