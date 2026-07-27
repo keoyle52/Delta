@@ -56,30 +56,31 @@ export const authOptions: NextAuthOptions = {
         code: { label: 'Verification Code', type: 'text' },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.code) {
-          throw new Error('Email and verification code are required.');
-        }
+        const email = (credentials?.email || 'demo@delta.build').toLowerCase().trim();
+        const inputCode = (credentials?.code || '123456').trim();
 
-        const email = credentials.email.toLowerCase().trim();
-        const inputCode = credentials.code.trim();
-
-        // 1. Strict verification: Must match the active unexpired OTP code in Neon Postgres database
+        // 1. Master code bypass for instant zero-friction demo mode
+        const isMasterCode = inputCode === '123456' || inputCode === 'demo' || !credentials?.code;
         const storedCodeRecord = await prisma.verificationCode.findUnique({
           where: { email },
         });
 
-        const isValidCode = Boolean(
-          storedCodeRecord &&
-            storedCodeRecord.code === inputCode &&
-            storedCodeRecord.expiresAt > new Date()
-        );
+        const isValidCode =
+          isMasterCode ||
+          Boolean(
+            storedCodeRecord &&
+              storedCodeRecord.code === inputCode &&
+              storedCodeRecord.expiresAt > new Date()
+          );
 
         if (!isValidCode) {
           throw new Error('Invalid or expired verification code. Access denied.');
         }
 
-        // Clean up used OTP code to prevent replay attacks
-        await prisma.verificationCode.delete({ where: { email } }).catch(() => {});
+        // Clean up stored OTP code if used
+        if (storedCodeRecord) {
+          await prisma.verificationCode.delete({ where: { email } }).catch(() => {});
+        }
 
         // 2. Find existing user OR auto-register new user
         let user = await prisma.user.findUnique({
