@@ -2,6 +2,7 @@ import { inngest } from './client';
 import { prisma } from '@/lib/prisma';
 import { executeAppKitSwap, executeAppKitBridge, executeAppKitSend } from '@/lib/circle/app-kit';
 import { sendArcTransfer } from '@/lib/circle/wallets';
+import { getWalletBalances } from '@/lib/arc/rpc';
 
 /**
  * Inngest Durable Workflow Execution Function
@@ -143,13 +144,30 @@ export const executeWorkflowFunction = inngest.createFunction(
           if (nodeType === 'swap') {
             const tokenOut = nodeData.tokenOut || 'EURC';
 
+            // Pre-flight Gas Reserve Validation
+            const balances = await getWalletBalances(walletAddress).catch(() => ({ usdc: '0', eurc: '0' }));
+            const currentUsdcBalance = parseFloat(balances.usdc || '0');
+            const requiredGasReserve = 0.05;
+
+            let executableAmount = parseFloat(actionAmount);
+            if (currentUsdcBalance < requiredGasReserve) {
+              throw new Error(`Insufficient USDC balance on Arc Testnet wallet for gas reserve. Available: ${currentUsdcBalance.toFixed(4)} USDC, Required Gas Reserve: ${requiredGasReserve} USDC.`);
+            }
+
+            if (currentUsdcBalance < executableAmount + requiredGasReserve) {
+              executableAmount = Math.max(0.0001, currentUsdcBalance - requiredGasReserve);
+              console.log(`[GAS RESERVE GUARD] Capped swap amount from ${actionAmount} to ${executableAmount.toFixed(6)} USDC to preserve ${requiredGasReserve} USDC gas reserve.`);
+            }
+
+            const finalAmountStr = executableAmount.toFixed(6);
+
             // Emit immediate RUNNING log before App Kit call
             await updateLog({
               stepId: node.id,
               nodeType: 'swap',
               nodeName: nodeData.label || 'Swap Action',
               status: 'RUNNING',
-              details: `Submitting ${actionAmount} USDC swap USDC → ${tokenOut} on Arc Testnet...`,
+              details: `Submitting ${finalAmountStr} USDC swap USDC → ${tokenOut} on Arc Testnet...`,
             });
 
             let txResult: any;
@@ -158,7 +176,7 @@ export const executeWorkflowFunction = inngest.createFunction(
               txResult = await executeAppKitSwap({
                 userWalletAddress: walletAddress,
                 walletId,
-                amountUsdc: actionAmount,
+                amountUsdc: finalAmountStr,
                 tokenOut,
               });
             } else {
