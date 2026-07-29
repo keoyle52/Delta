@@ -9,6 +9,27 @@ export async function POST(req: NextRequest) {
   try {
     // 1. Obtain raw, unparsed request string from req.text() BEFORE JSON.parse
     const rawRequestBody = await req.text();
+    let payload: any = {};
+    try {
+      payload = JSON.parse(rawRequestBody);
+    } catch (e) {
+      // Non-JSON payload
+    }
+
+    // Handle AWS SNS / Circle SubscriptionConfirmation Handshake BEFORE signature check
+    if (payload.Type === 'SubscriptionConfirmation' || payload.SubscribeURL) {
+      console.log('[CIRCLE WEBHOOK] Handling SubscriptionConfirmation handshake...');
+      if (payload.SubscribeURL) {
+        try {
+          await fetch(payload.SubscribeURL);
+          console.log('✅ Circle Webhook Subscription confirmed via SubscribeURL:', payload.SubscribeURL);
+        } catch (confirmErr: any) {
+          console.error('❌ Failed to confirm SubscribeURL:', confirmErr.message);
+        }
+      }
+      return NextResponse.json({ success: true, message: 'SubscriptionConfirmed' });
+    }
+
     const signatureHeader = req.headers.get('x-circle-signature');
     const keyIdHeader = req.headers.get('x-circle-key-id');
 
@@ -27,8 +48,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: verification.reason || 'Invalid webhook signature' }, { status: 401 });
     }
 
-    // 3. Parse JSON payload
-    const payload = JSON.parse(rawRequestBody);
+    // 3. Parse JSON payload (already parsed at top)
     const notificationType = payload.notificationType || '';
 
     console.log('[DEBUG WEBHOOK] notificationType:', notificationType);
