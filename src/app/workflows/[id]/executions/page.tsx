@@ -62,12 +62,42 @@ export default function ExecutionsPage({ params }: { params: Promise<{ id: strin
     }
   };
 
-  const getExplorerLink = (nodeType: string, txHash?: string) => {
+  const getExplorerLink = (nodeType: string, txHash?: string, destinationChain?: string) => {
     if (!txHash || txHash.startsWith('0x-manual') || txHash.startsWith('0x-webhook')) return null;
-    if (txHash.startsWith('0x')) {
-      return `https://testnet.arcscan.app/tx/${txHash}`;
+
+    const chain = destinationChain || (txHash.startsWith('0x') ? 'Arc_Testnet' : 'Solana_Devnet');
+
+    switch (chain) {
+      case 'Arc_Testnet':
+        return `https://testnet.arcscan.app/tx/${txHash}`;
+      case 'Ethereum_Sepolia':
+        return `https://sepolia.etherscan.io/tx/${txHash}`;
+      case 'Base_Sepolia':
+        return `https://sepolia.basescan.org/tx/${txHash}`;
+      case 'Arbitrum_Sepolia':
+        return `https://sepolia.arbiscan.io/tx/${txHash}`;
+      case 'Optimism_Sepolia':
+        return `https://sepolia-optimism.etherscan.io/tx/${txHash}`;
+      case 'Polygon_Amoy_Testnet':
+        return `https://amoy.polygonscan.com/tx/${txHash}`;
+      case 'Avalanche_Fuji':
+        return `https://testnet.snowtrace.io/tx/${txHash}`;
+      case 'Solana_Devnet':
+        return `https://explorer.solana.com/tx/${txHash}?cluster=devnet`;
+      case 'Sonic_Testnet':
+        return `https://user-spicynet.soniclabs.com/tx/${txHash}`;
+      case 'Sei_Testnet':
+        return `https://seitrace.com/tx/${txHash}?chain=atlantic-2`;
+      case 'Unichain_Sepolia':
+        return `https://sepolia.uniscan.xyz/tx/${txHash}`;
+      case 'World_Chain_Sepolia':
+        return `https://worldchain-sepolia.explorer.alchemy.com/tx/${txHash}`;
+      default:
+        if (txHash.startsWith('0x')) {
+          return `https://testnet.arcscan.app/tx/${txHash}`;
+        }
+        return `https://explorer.solana.com/tx/${txHash}?cluster=devnet`;
     }
-    return `https://explorer.solana.com/tx/${txHash}?cluster=devnet`;
   };
 
   return (
@@ -191,7 +221,7 @@ export default function ExecutionsPage({ params }: { params: Promise<{ id: strin
                     const stepPartial = step.status === 'PARTIAL';
                     const stepFailed = step.status === 'FAILED';
                     const stepSkipped = step.status === 'SKIPPED';
-                    const explorerUrl = getExplorerLink(step.nodeType, step.txHash);
+                    const explorerUrl = getExplorerLink(step.nodeType, step.txHash, step.destinationChain);
 
                     return (
                       <div key={idx} className="relative group space-y-1.5">

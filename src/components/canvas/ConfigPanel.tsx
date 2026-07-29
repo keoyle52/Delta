@@ -118,24 +118,41 @@ export default function ConfigPanel({ selectedNode, onUpdateNode, onDeleteNode }
 
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-slate-300">Target Destination Chain</label>
-              <input
-                type="text"
-                disabled
-                value="Solana_Devnet"
-                className="w-full rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2 text-sm text-slate-400 font-mono"
-              />
+              <select
+                value={data.destinationChain || 'Solana_Devnet'}
+                onChange={(e) => handleChange('destinationChain', e.target.value)}
+                className="w-full rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
+              >
+                <option value="Solana_Devnet">Solana Devnet (Solana_Devnet)</option>
+                <option value="Arbitrum_Sepolia">Arbitrum Sepolia (Arbitrum_Sepolia)</option>
+                <option value="Avalanche_Fuji">Avalanche Fuji (Avalanche_Fuji)</option>
+                <option value="Base_Sepolia">Base Sepolia (Base_Sepolia)</option>
+                <option value="Ethereum_Sepolia">Ethereum Sepolia (Ethereum_Sepolia)</option>
+                <option value="Optimism_Sepolia">OP Sepolia (Optimism_Sepolia)</option>
+                <option value="Polygon_Amoy_Testnet">Polygon PoS Amoy (Polygon_Amoy_Testnet)</option>
+                <option value="Sei_Testnet">Sei Testnet (Sei_Testnet)</option>
+                <option value="Sonic_Testnet">Sonic Testnet (Sonic_Testnet)</option>
+                <option value="Unichain_Sepolia">Unichain Sepolia (Unichain_Sepolia)</option>
+                <option value="World_Chain_Sepolia">World Chain Sepolia (World_Chain_Sepolia)</option>
+              </select>
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-slate-300">Solana Recipient Address</label>
+              <label className="text-xs font-medium text-slate-300">Destination Recipient Address</label>
               <input
                 type="text"
-                placeholder="e.g. 7xKXtg2CW87d97TXJ..."
+                placeholder={
+                  (data.destinationChain || 'Solana_Devnet') === 'Solana_Devnet'
+                    ? 'e.g. 7xKXtg2CW87d97TXJ...'
+                    : 'e.g. 0x742d35Cc6634C0532925a3b844Bc454e4438f44e'
+                }
                 value={data.destinationAddress || ''}
                 onChange={(e) => handleChange('destinationAddress', e.target.value)}
                 className="w-full rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none font-mono text-xs"
               />
-              <p className="text-[11px] text-slate-500">Target can be any Solana Devnet address (Circle CCTP relayer mints to destination).</p>
+              <p className="text-[11px] text-slate-500">
+                Circle CCTP forwarder mints to recipient address on target chain (0x address for EVM, base58 for Solana).
+              </p>
             </div>
           </div>
         )}

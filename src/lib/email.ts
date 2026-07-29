@@ -1,5 +1,9 @@
 /**
- * Resend Email Dispatcher
+ * Transactional Email Dispatcher (Resend)
+ *
+ * NOTE ON AUTH vs TRANSACTIONAL EMAILS:
+ * User authentication and email OTP verification are handled exclusively by Privy (@privy-io/react-auth).
+ * Resend is retained here purely for optional transactional workflow execution notification alerts (sendExecutionNotificationEmail).
  */
 
 export async function sendResendEmail({

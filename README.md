@@ -8,10 +8,11 @@ Delta is a visual node-based money-flow automation platform built for the **Circ
 
 ## ⚡ Core Features
 
+- **Privy Passwordless Authentication**: Seamless email OTP authentication powered by **Privy** (Circle/Arc ecosystem partner with 499 free MAU / 50k signatures / $1M volume free).
 - **Circle Custodial Developer-Controlled Wallets**: Automatic user wallet provisioning on **Arc Testnet (`"ARC-TESTNET"`)** bound to a single application-wide Wallet Set.
-- **Circle App Kit Integration**: Execute token swaps (`USDC` $\rightarrow$ `EURC`), cross-chain CCTP bridges (`Arc_Testnet` $\rightarrow$ `Solana_Devnet`), and EVM USDC transfers.
+- **Circle App Kit Multi-Chain Integration**: Token swaps (`USDC` $\rightarrow$ `EURC`), multi-chain CCTP forwarder bridges (`Arc_Testnet` $\rightarrow$ Solana Devnet, Arbitrum Sepolia, Base Sepolia, Ethereum Sepolia, OP Sepolia, Polygon Amoy, etc.), and EVM USDC transfers.
 - **Arc Multi-Node Provider RPC Fallback**: Built using `viem` fallback transport across official Arc node provider partners (**Arc Public RPC**, **Blockdaemon**, **dRPC**).
-- **Durable Background Execution**: Sequential workflow automation steps managed via **Inngest** with real-time log tracking.
+- **Durable Background Execution & Live Audit Trail**: Sequential workflow automation steps managed via **Inngest** with real-time granular log state updates (`RUNNING` $\rightarrow$ `PARTIAL` $\rightarrow$ `COMPLETE`).
 - **Cryptographic Webhook Verification**: Runtime Circle Webhook signature verification using **ECDSA + SHA-256** and dynamic public key caching.
 - **Visual Flow Editor (`@xyflow/react`)**: Node palette supporting Trigger (USDC Received), Swap, Bridge, Send, Notify, and Hold nodes with strict $\le 100\%$ allocation validation.
 
@@ -23,7 +24,7 @@ Delta is a visual node-based money-flow automation platform built for the **Circ
 ```bash
 git clone https://github.com/keoyle52/Delta.git
 cd Delta
-npm install
+npm install --legacy-peer-deps
 ```
 
 ### 2. Environment Configuration
@@ -37,8 +38,9 @@ cp .env.example .env
 npx prisma db push
 ```
 
-### 4. Register Circle Entity Secret & Generate Wallet Set
-Run the one-time setup scripts:
+### 4. Configure Privy App & Register Circle Entity Secret
+1. Create a free app at [dashboard.privy.io](https://dashboard.privy.io) and obtain your `NEXT_PUBLIC_PRIVY_APP_ID` and `PRIVY_APP_SECRET`.
+2. Run the one-time Circle setup scripts:
 ```bash
 # Register Entity Secret on Circle Developer Console
 npx tsx scripts/register-entity-secret-sdk.ts

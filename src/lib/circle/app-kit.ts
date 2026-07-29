@@ -72,27 +72,39 @@ export async function executeAppKitSwap({
 }
 
 /**
- * Execute a Cross-chain Bridge from Arc Testnet to Solana Devnet (CCTP)
+ * Execute a Cross-chain Bridge from Arc Testnet to any supported destination chain (CCTP)
  */
 export async function executeAppKitBridge({
   userWalletAddress,
   destinationAddress,
   amountUsdc,
+  destinationChain = 'Solana_Devnet',
 }: {
   userWalletAddress: string;
   destinationAddress: string;
   amountUsdc: string;
+  destinationChain?: string;
 }) {
   const kit = getAppKitInstance();
   const circleWalletsAdapter = getCircleWalletsAdapter();
 
   try {
-    // 1. Check runtime forwarder support for bridge destination
+    // 1. Check runtime forwarder support for requested bridge destination chain
     const bridgeChains = kit.getSupportedChains('bridge');
-    const solanaDevnet = bridgeChains.find((c: any) => c.chain === 'Solana_Devnet');
+    const targetChain: any = bridgeChains.find(
+      (c: any) => c.chain === destinationChain || c.name === destinationChain
+    );
 
-    if (!solanaDevnet?.cctp?.forwarderSupported?.destination) {
-      throw new Error('Solana_Devnet forwarder is not supported; recipientAddress bridge flow cannot proceed.');
+    const isForwarderSupported = Boolean(
+      targetChain?.cctp?.forwarderSupported?.destination ||
+      targetChain?.forwarderSupported?.destination ||
+      targetChain?.forwarderSupported
+    );
+
+    if (!targetChain || !isForwarderSupported) {
+      throw new Error(
+        `Destination chain "${destinationChain}" is not supported for recipientAddress/forwarder CCTP bridge operations.`
+      );
     }
 
     // 2. Perform CCTP bridge call with forwarder-based destination (useForwarder: true is mandatory)
@@ -103,7 +115,7 @@ export async function executeAppKitBridge({
         address: userWalletAddress,
       },
       to: {
-        chain: 'Solana_Devnet',
+        chain: destinationChain,
         recipientAddress: destinationAddress,
         useForwarder: true,
       } as any,

@@ -31,7 +31,9 @@ export default function BridgeNode({ data, selected }: { data: any; selected?: b
       </div>
 
       <div className="space-y-1">
-        <h4 className="text-sm font-semibold text-white">{data.label || 'Bridge to Solana'}</h4>
+        <h4 className="text-sm font-semibold text-white">
+          {data.label || `Bridge to ${data.destinationChain || 'Solana_Devnet'}`}
+        </h4>
         <p className="text-xs text-slate-400">
           Dest: <span className="font-mono text-blue-300">{data.destinationChain || 'Solana_Devnet'}</span>
         </p>

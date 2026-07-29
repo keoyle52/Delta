@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import NextAuthProvider from '@/components/providers/NextAuthProvider';
+import PrivyClientProvider from '@/components/providers/PrivyClientProvider';
 import Header from '@/components/layout/Header';
 import '@/app/globals.css';
 
@@ -16,10 +17,12 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className="bg-slate-950 text-slate-100 antialiased min-h-screen flex flex-col">
-        <NextAuthProvider>
-          <Header />
-          <main className="flex-1 flex flex-col">{children}</main>
-        </NextAuthProvider>
+        <PrivyClientProvider>
+          <NextAuthProvider>
+            <Header />
+            <main className="flex-1 flex flex-col">{children}</main>
+          </NextAuthProvider>
+        </PrivyClientProvider>
       </body>
     </html>
   );

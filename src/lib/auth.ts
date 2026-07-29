@@ -50,39 +50,53 @@ export async function getOrCreateUserWallet(userId: string) {
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
-      name: 'Email Verification Code',
+      name: 'Privy Email OTP & Demo Login',
       credentials: {
         email: { label: 'Email', type: 'email' },
         code: { label: 'Verification Code', type: 'text' },
+        privyToken: { label: 'Privy Access Token', type: 'text' },
       },
       async authorize(credentials) {
-        const email = (credentials?.email || 'demo@delta.build').toLowerCase().trim();
-        const inputCode = (credentials?.code || '123456').trim();
+        if (!credentials?.email || !credentials.email.trim()) {
+          throw new Error('Email address is required for authentication.');
+        }
+        let email = credentials.email.toLowerCase().trim();
+        const inputCode = (credentials?.code || '').trim();
+        const privyToken = credentials?.privyToken;
 
-        // 1. Master code bypass for instant zero-friction demo mode
-        const isMasterCode = inputCode === '123456' || inputCode === 'demo' || !credentials?.code;
-        const storedCodeRecord = await prisma.verificationCode.findUnique({
-          where: { email },
-        });
+        // 1. Verify Privy token if provided via Privy client SDK
+        const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+        const appSecret = process.env.PRIVY_APP_SECRET;
 
-        const isValidCode =
-          isMasterCode ||
-          Boolean(
-            storedCodeRecord &&
-              storedCodeRecord.code === inputCode &&
-              storedCodeRecord.expiresAt > new Date()
-          );
-
-        if (!isValidCode) {
-          throw new Error('Invalid or expired verification code. Access denied.');
+        let isVerifiedPrivyUser = false;
+        if (privyToken && appId && appSecret) {
+          try {
+            const { PrivyClient } = await import('@privy-io/server-auth');
+            const privy = new PrivyClient(appId, appSecret);
+            const verifiedClaims = await privy.verifyAuthToken(privyToken);
+            if (verifiedClaims?.userId) {
+              const privyUser = await privy.getUser(verifiedClaims.userId);
+              if (privyUser?.email?.address) {
+                email = privyUser.email.address.toLowerCase().trim();
+              }
+              isVerifiedPrivyUser = true;
+            }
+          } catch (privyErr: any) {
+            console.warn('Privy token verification warning:', privyErr.message);
+          }
         }
 
-        // Clean up stored OTP code if used
-        if (storedCodeRecord) {
-          await prisma.verificationCode.delete({ where: { email } }).catch(() => {});
+        // Strictly restrict 1-Click Jury Demo access to demo accounts ONLY
+        const isDemoAccount = email === 'demo@delta.build' || email === 'demo-test-user@delta.app';
+        const isDemoBypass = isDemoAccount && (inputCode === '123456' || inputCode === 'demo');
+
+        const isValidAccess = isVerifiedPrivyUser || isDemoBypass;
+
+        if (!isValidAccess) {
+          throw new Error('Invalid or unverified login session. Privy token verification required.');
         }
 
-        // 2. Find existing user OR auto-register new user
+        // 2. Find existing user OR auto-register new user in Prisma
         let user = await prisma.user.findUnique({
           where: { email },
         });

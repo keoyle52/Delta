@@ -35,6 +35,10 @@ export const executeWorkflowFunction = inngest.createFunction(
 
     // 2. Initialize execution record
     const execution = await step.run('create-execution-record', async () => {
+      if (event.data.executionId) {
+        const existing = await prisma.execution.findUnique({ where: { id: event.data.executionId } });
+        if (existing) return existing;
+      }
       return await prisma.execution.create({
         data: {
           workflowId,
@@ -74,8 +78,35 @@ export const executeWorkflowFunction = inngest.createFunction(
           ? JSON.parse(currentExecution.stepLogs)
           : (currentExecution?.stepLogs || []);
 
-        const updateLog = async (logEntry: any) => {
-          logs.push(logEntry);
+        const updateLog = async (rawLogEntry: any) => {
+          const logEntry = JSON.parse(
+            JSON.stringify(rawLogEntry, (key, value) => (typeof value === 'bigint' ? value.toString() : value))
+          );
+          const freshExec = await prisma.execution.findUnique({
+            where: { id: execution.id },
+          });
+
+          let logs = typeof freshExec?.stepLogs === 'string'
+            ? JSON.parse(freshExec.stepLogs)
+            : (freshExec?.stepLogs || []);
+
+          const existingIndex = logs.findIndex(
+            (l: any) => l.stepId === logEntry.stepId && (l.status === 'RUNNING' || l.status === 'PARTIAL')
+          );
+
+          if (existingIndex >= 0) {
+            logs[existingIndex] = {
+              ...logs[existingIndex],
+              ...logEntry,
+              timestamp: new Date().toISOString(),
+            };
+          } else {
+            logs.push({
+              ...logEntry,
+              timestamp: new Date().toISOString(),
+            });
+          }
+
           await prisma.execution.update({
             where: { id: execution.id },
             data: { stepLogs: logs as any },
@@ -89,7 +120,6 @@ export const executeWorkflowFunction = inngest.createFunction(
             nodeName: node.data?.label || node.type.toUpperCase(),
             status: 'SKIPPED',
             details: `Skipped action: percentage is 0 or allocation amount is ${actionAmount} USDC`,
-            timestamp: new Date().toISOString(),
           });
           return;
         }
@@ -98,8 +128,30 @@ export const executeWorkflowFunction = inngest.createFunction(
         const nodeData = node.data || {};
 
         try {
+          // Check if this step already executed an on-chain transaction on a prior Inngest attempt
+          const freshExecForCheck = await prisma.execution.findUnique({ where: { id: execution.id } });
+          const currentLogsForCheck = typeof freshExecForCheck?.stepLogs === 'string'
+            ? JSON.parse(freshExecForCheck.stepLogs)
+            : (freshExecForCheck?.stepLogs || []);
+          const recordedLog = currentLogsForCheck.find((l: any) => l.stepId === node.id && l.txHash);
+
+          if (recordedLog?.txHash) {
+            console.log(`[INNGEST IDEMPOTENCY RECOVERY] Skipping redundant on-chain call for node ${node.id}. Recorded txHash: ${recordedLog.txHash}`);
+            return;
+          }
+
           if (nodeType === 'swap') {
             const tokenOut = nodeData.tokenOut || 'EURC';
+
+            // Emit immediate RUNNING log before App Kit call
+            await updateLog({
+              stepId: node.id,
+              nodeType: 'swap',
+              nodeName: nodeData.label || 'Swap Action',
+              status: 'RUNNING',
+              details: `Submitting ${actionAmount} USDC swap USDC → ${tokenOut} on Arc Testnet...`,
+            });
+
             let txResult: any;
 
             if (process.env.CIRCLE_API_KEY && process.env.CIRCLE_ENTITY_SECRET) {
@@ -122,9 +174,18 @@ export const executeWorkflowFunction = inngest.createFunction(
                 nodeName: nodeData.label || 'Swap Action',
                 status: 'FAILED',
                 error: `Swap failed: no valid transaction hash returned from Circle App Kit. State: ${txResult?.state || 'unknown'}`,
-                timestamp: new Date().toISOString(),
               });
             } else {
+              // Persist txHash immediately to DB as PARTIAL to secure idempotency before any secondary operations
+              await updateLog({
+                stepId: node.id,
+                nodeType: 'swap',
+                nodeName: nodeData.label || 'Swap Action',
+                status: 'PARTIAL',
+                txHash: realTxHash,
+                details: `Swap transaction submitted on Arc Testnet (tx: ${realTxHash})...`,
+              });
+
               await updateLog({
                 stepId: node.id,
                 nodeType: 'swap',
@@ -132,14 +193,24 @@ export const executeWorkflowFunction = inngest.createFunction(
                 status: 'COMPLETE',
                 txHash: realTxHash,
                 details: `Swapped ${actionAmount} USDC to ${tokenOut} on Arc Testnet`,
-                timestamp: new Date().toISOString(),
               });
             }
           } else if (nodeType === 'bridge') {
             const destinationAddress = nodeData.destinationAddress;
+            const destinationChain = nodeData.destinationChain || 'Solana_Devnet';
             if (!destinationAddress) {
               throw new Error('Bridge node destinationAddress is required');
             }
+
+            // Emit immediate RUNNING log before App Kit bridge call
+            await updateLog({
+              stepId: node.id,
+              nodeType: 'bridge',
+              nodeName: nodeData.label || 'CCTP Bridge Action',
+              status: 'RUNNING',
+              destinationChain,
+              details: `Initiating CCTP bridge of ${actionAmount} USDC from Arc Testnet to ${destinationChain}...`,
+            });
 
             let txResult: any;
             if (process.env.CIRCLE_API_KEY && process.env.CIRCLE_ENTITY_SECRET) {
@@ -147,6 +218,7 @@ export const executeWorkflowFunction = inngest.createFunction(
                 userWalletAddress: walletAddress,
                 destinationAddress,
                 amountUsdc: actionAmount,
+                destinationChain,
               });
             } else {
               throw new Error('CIRCLE_API_KEY / CIRCLE_ENTITY_SECRET missing in environment');
@@ -162,8 +234,8 @@ export const executeWorkflowFunction = inngest.createFunction(
                 nodeType: 'bridge',
                 nodeName: nodeData.label || 'CCTP Bridge Action',
                 status: 'FAILED',
+                destinationChain,
                 error: `Bridge failed: no valid burn transaction hash returned on Arc Testnet. State: ${txResult?.state || 'unknown'}`,
-                timestamp: new Date().toISOString(),
               });
             } else if (mintStep?.state !== 'success') {
               await updateLog({
@@ -172,8 +244,8 @@ export const executeWorkflowFunction = inngest.createFunction(
                 nodeName: nodeData.label || 'CCTP Bridge Action',
                 status: 'PARTIAL',
                 txHash: realTxHash,
-                details: `Burn succeeded on Arc Testnet (source chain), but mint on Solana Devnet did not complete (relayer/attestation pending or failed).`,
-                timestamp: new Date().toISOString(),
+                destinationChain,
+                details: `Burn submitted on Arc Testnet (tx: ${realTxHash}). Waiting for Circle CCTP attestation and mint on ${destinationChain}...`,
               });
             } else {
               const mintTxHash = mintStep?.txHash || realTxHash;
@@ -183,8 +255,8 @@ export const executeWorkflowFunction = inngest.createFunction(
                 nodeName: nodeData.label || 'CCTP Bridge Action',
                 status: 'COMPLETE',
                 txHash: mintTxHash,
-                details: `Bridged ${actionAmount} USDC via CCTP to Solana Devnet recipient: ${destinationAddress}`,
-                timestamp: new Date().toISOString(),
+                destinationChain,
+                details: `Bridged ${actionAmount} USDC via CCTP to ${destinationChain} recipient: ${destinationAddress}`,
               });
             }
           } else if (nodeType === 'send') {
@@ -192,6 +264,15 @@ export const executeWorkflowFunction = inngest.createFunction(
             if (!destinationAddress) {
               throw new Error('Send node destinationAddress is required');
             }
+
+            // Emit immediate RUNNING log before App Kit send call
+            await updateLog({
+              stepId: node.id,
+              nodeType: 'send',
+              nodeName: nodeData.label || 'Send Action',
+              status: 'RUNNING',
+              details: `Submitting ${actionAmount} USDC transfer to ${destinationAddress} on Arc Testnet...`,
+            });
 
             let realTxHash = '';
             if (process.env.CIRCLE_API_KEY && process.env.CIRCLE_ENTITY_SECRET) {
@@ -221,9 +302,18 @@ export const executeWorkflowFunction = inngest.createFunction(
                 nodeName: nodeData.label || 'Send Action',
                 status: 'FAILED',
                 error: `Send failed: no valid transaction hash returned from Circle App Kit.`,
-                timestamp: new Date().toISOString(),
               });
             } else {
+              // Persist txHash immediately to DB as PARTIAL to secure idempotency before any secondary operations
+              await updateLog({
+                stepId: node.id,
+                nodeType: 'send',
+                nodeName: nodeData.label || 'Send Action',
+                status: 'PARTIAL',
+                txHash: realTxHash,
+                details: `Transfer submitted on Arc Testnet (tx: ${realTxHash})...`,
+              });
+
               await updateLog({
                 stepId: node.id,
                 nodeType: 'send',
@@ -231,12 +321,19 @@ export const executeWorkflowFunction = inngest.createFunction(
                 status: 'COMPLETE',
                 txHash: realTxHash,
                 details: `Sent ${actionAmount} USDC to ${destinationAddress} on Arc Testnet`,
-                timestamp: new Date().toISOString(),
               });
             }
           } else if (nodeType === 'notify') {
             const webhookUrl = nodeData.webhookUrl;
             const template = nodeData.template || 'Delta Alert: {{amount}} USDC processed. Tx: {{txHash}}';
+
+            await updateLog({
+              stepId: node.id,
+              nodeType: 'notify',
+              nodeName: nodeData.label || 'Log Notification',
+              status: 'RUNNING',
+              details: `Preparing webhook notification dispatch...`,
+            });
 
             let message = template
               .replace('{{amount}}', triggerAmount)
@@ -267,7 +364,6 @@ export const executeWorkflowFunction = inngest.createFunction(
               nodeName: nodeData.label || 'Log Notification',
               status: 'COMPLETE',
               details: `Sent webhook alert: "${message}"`,
-              timestamp: new Date().toISOString(),
             });
           }
         } catch (err: any) {
@@ -277,7 +373,6 @@ export const executeWorkflowFunction = inngest.createFunction(
             nodeName: nodeData.label || node.type.toUpperCase(),
             status: 'FAILED',
             error: err.message || String(err),
-            timestamp: new Date().toISOString(),
           });
         }
       });
