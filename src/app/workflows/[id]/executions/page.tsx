@@ -52,7 +52,7 @@ export default function ExecutionsPage({ params }: { params: Promise<{ id: strin
       await fetch(`/api/workflows/${workflowId}/executions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: '50.00' }),
+        body: JSON.stringify({ amount: '1.00' }),
       });
       await fetchExecutions();
     } catch (err) {

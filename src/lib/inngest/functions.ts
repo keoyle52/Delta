@@ -220,6 +220,23 @@ export const executeWorkflowFunction = inngest.createFunction(
               throw new Error('Bridge node destinationAddress is required');
             }
 
+            // Pre-flight Gas Reserve Validation
+            const balances = await getWalletBalances(walletAddress).catch(() => ({ usdc: '0', eurc: '0' }));
+            const currentUsdcBalance = parseFloat(balances.usdc || '0');
+            const requiredGasReserve = 0.05;
+
+            let executableAmount = parseFloat(actionAmount);
+            if (currentUsdcBalance < requiredGasReserve) {
+              throw new Error(`Insufficient USDC balance on Arc Testnet wallet for gas reserve. Available: ${currentUsdcBalance.toFixed(4)} USDC, Required Gas Reserve: ${requiredGasReserve} USDC.`);
+            }
+
+            if (currentUsdcBalance < executableAmount + requiredGasReserve) {
+              executableAmount = Math.max(0.0001, currentUsdcBalance - requiredGasReserve);
+              console.log(`[GAS RESERVE GUARD] Capped bridge amount from ${actionAmount} to ${executableAmount.toFixed(6)} USDC to preserve ${requiredGasReserve} USDC gas reserve.`);
+            }
+
+            const finalAmountStr = executableAmount.toFixed(6);
+
             // Emit immediate RUNNING log before App Kit bridge call
             await updateLog({
               stepId: node.id,
@@ -227,7 +244,7 @@ export const executeWorkflowFunction = inngest.createFunction(
               nodeName: nodeData.label || 'CCTP Bridge Action',
               status: 'RUNNING',
               destinationChain,
-              details: `Initiating CCTP bridge of ${actionAmount} USDC from Arc Testnet to ${destinationChain}...`,
+              details: `Initiating CCTP bridge of ${finalAmountStr} USDC from Arc Testnet to ${destinationChain}...`,
             });
 
             let txResult: any;
@@ -235,7 +252,7 @@ export const executeWorkflowFunction = inngest.createFunction(
               txResult = await executeAppKitBridge({
                 userWalletAddress: walletAddress,
                 destinationAddress,
-                amountUsdc: actionAmount,
+                amountUsdc: finalAmountStr,
                 destinationChain,
               });
             } else {
@@ -274,7 +291,7 @@ export const executeWorkflowFunction = inngest.createFunction(
                 status: 'COMPLETE',
                 txHash: mintTxHash,
                 destinationChain,
-                details: `Bridged ${actionAmount} USDC via CCTP to ${destinationChain} recipient: ${destinationAddress}`,
+                details: `Bridged ${finalAmountStr} USDC via CCTP to ${destinationChain} recipient: ${destinationAddress}`,
               });
             }
           } else if (nodeType === 'send') {
@@ -283,13 +300,30 @@ export const executeWorkflowFunction = inngest.createFunction(
               throw new Error('Send node destinationAddress is required');
             }
 
+            // Pre-flight Gas Reserve Validation
+            const balances = await getWalletBalances(walletAddress).catch(() => ({ usdc: '0', eurc: '0' }));
+            const currentUsdcBalance = parseFloat(balances.usdc || '0');
+            const requiredGasReserve = 0.05;
+
+            let executableAmount = parseFloat(actionAmount);
+            if (currentUsdcBalance < requiredGasReserve) {
+              throw new Error(`Insufficient USDC balance on Arc Testnet wallet for gas reserve. Available: ${currentUsdcBalance.toFixed(4)} USDC, Required Gas Reserve: ${requiredGasReserve} USDC.`);
+            }
+
+            if (currentUsdcBalance < executableAmount + requiredGasReserve) {
+              executableAmount = Math.max(0.0001, currentUsdcBalance - requiredGasReserve);
+              console.log(`[GAS RESERVE GUARD] Capped send amount from ${actionAmount} to ${executableAmount.toFixed(6)} USDC to preserve ${requiredGasReserve} USDC gas reserve.`);
+            }
+
+            const finalAmountStr = executableAmount.toFixed(6);
+
             // Emit immediate RUNNING log before App Kit send call
             await updateLog({
               stepId: node.id,
               nodeType: 'send',
               nodeName: nodeData.label || 'Send Action',
               status: 'RUNNING',
-              details: `Submitting ${actionAmount} USDC transfer to ${destinationAddress} on Arc Testnet...`,
+              details: `Submitting ${finalAmountStr} USDC transfer to ${destinationAddress} on Arc Testnet...`,
             });
 
             let realTxHash = '';
@@ -298,7 +332,7 @@ export const executeWorkflowFunction = inngest.createFunction(
                 const res: any = await executeAppKitSend({
                   userWalletAddress: walletAddress,
                   destinationAddress,
-                  amountUsdc: actionAmount,
+                  amountUsdc: finalAmountStr,
                 });
                 realTxHash = res?.txHash || res?.id || res?.transactionHash || res?.steps?.find((s: any) => s.txHash)?.txHash || '';
               } catch (appKitErr) {
@@ -306,7 +340,7 @@ export const executeWorkflowFunction = inngest.createFunction(
                 realTxHash = (await sendArcTransfer({
                   walletId,
                   destinationAddress,
-                  amountUsdc: actionAmount,
+                  amountUsdc: finalAmountStr,
                 })) || '';
               }
             } else {
