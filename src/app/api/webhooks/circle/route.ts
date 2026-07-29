@@ -33,17 +33,18 @@ export async function POST(req: NextRequest) {
 
     console.log('[DEBUG WEBHOOK] notificationType:', notificationType);
 
-    // FIX A: STRICT INBOUND ONLY MATCHING (Reject outbound transfers to prevent self-trigger loop)
+    const eventData = payload.notification || payload.event || payload;
+    const rawTxType = (eventData.transactionType || eventData.type || eventData.operation || eventData.direction || '').toUpperCase();
+
+    // Match inbound notifications across both DCW (transfers.update) and Core API (transactions.inbound)
     const isMatchingType =
-      notificationType === 'transactions.inbound' ||
-      notificationType.endsWith('.inbound') ||
-      (notificationType.includes('inbound') && !notificationType.includes('outbound'));
+      notificationType.includes('inbound') ||
+      notificationType.includes('transfers') ||
+      notificationType.includes('transactions') ||
+      rawTxType === 'INBOUND';
 
     if (isMatchingType) {
-      const eventData = payload.notification || payload.event || payload;
-      const transactionType = (eventData.transactionType || eventData.type || eventData.operation || '').toUpperCase();
-
-      if (transactionType && (transactionType === 'OUTBOUND' || transactionType.includes('SWAP') || transactionType.includes('INTERNAL'))) {
+      if (rawTxType === 'OUTBOUND' || rawTxType.includes('SWAP') || rawTxType.includes('INTERNAL')) {
         console.log('[DEBUG WEBHOOK] Ignored OUTBOUND/SWAP/INTERNAL transaction to prevent self-trigger loop');
         return NextResponse.json({ success: true, message: 'Ignored non-inbound or swap transaction' });
       }
