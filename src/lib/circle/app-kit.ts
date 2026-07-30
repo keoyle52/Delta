@@ -37,7 +37,7 @@ export async function executeAppKitSwap({
   tokenOut,
 }: {
   userWalletAddress: string;
-  walletId: string;
+  walletId?: string;
   amountUsdc: string;
   tokenOut: string;
 }) {
@@ -55,7 +55,8 @@ export async function executeAppKitSwap({
         adapter: circleWalletsAdapter,
         chain: 'Arc_Testnet',
         address: userWalletAddress,
-      },
+        ...(walletId ? { walletId } : {}),
+      } as any,
       tokenIn: 'USDC',
       tokenOut: tokenOut as 'EURC' | 'USDC',
       amountIn: amountUsdc,
@@ -76,11 +77,13 @@ export async function executeAppKitSwap({
  */
 export async function executeAppKitBridge({
   userWalletAddress,
+  walletId,
   destinationAddress,
   amountUsdc,
   destinationChain = 'Solana_Devnet',
 }: {
   userWalletAddress: string;
+  walletId?: string;
   destinationAddress: string;
   amountUsdc: string;
   destinationChain?: string;
@@ -113,7 +116,8 @@ export async function executeAppKitBridge({
         adapter: circleWalletsAdapter,
         chain: 'Arc_Testnet',
         address: userWalletAddress,
-      },
+        ...(walletId ? { walletId } : {}),
+      } as any,
       to: {
         chain: destinationChain,
         recipientAddress: destinationAddress,
@@ -134,11 +138,13 @@ export async function executeAppKitBridge({
  */
 export async function executeAppKitSend({
   userWalletAddress,
+  walletId,
   destinationAddress,
   amountUsdc,
   token = 'USDC',
 }: {
   userWalletAddress: string;
+  walletId?: string;
   destinationAddress: string;
   amountUsdc: string;
   token?: 'USDC' | 'EURC';
@@ -152,7 +158,8 @@ export async function executeAppKitSend({
         adapter: circleWalletsAdapter,
         chain: 'Arc_Testnet',
         address: userWalletAddress,
-      },
+        ...(walletId ? { walletId } : {}),
+      } as any,
       to: destinationAddress,
       token: token as 'USDC' | 'EURC',
       amount: amountUsdc,

@@ -251,6 +251,7 @@ export const executeWorkflowFunction = inngest.createFunction(
             if (process.env.CIRCLE_API_KEY && process.env.CIRCLE_ENTITY_SECRET) {
               txResult = await executeAppKitBridge({
                 userWalletAddress: walletAddress,
+                walletId,
                 destinationAddress,
                 amountUsdc: finalAmountStr,
                 destinationChain,
@@ -331,6 +332,7 @@ export const executeWorkflowFunction = inngest.createFunction(
               try {
                 const res: any = await executeAppKitSend({
                   userWalletAddress: walletAddress,
+                  walletId,
                   destinationAddress,
                   amountUsdc: finalAmountStr,
                 });
