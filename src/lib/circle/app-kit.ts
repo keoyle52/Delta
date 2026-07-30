@@ -76,7 +76,13 @@ export async function executeAppKitSwap({
     return swapResult;
   } catch (error: any) {
     console.error('App Kit Swap Full Error Object:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
-    throw new Error(`App Kit Swap operation failed: ${error.message || error}`);
+    const msg = String(error.message || error);
+    if (msg.includes('No route available') || msg.includes('INPUT_UNSUPPORTED_ROUTE') || error.code === 1003) {
+      throw new Error(
+        `Swap amount of ${amountUsdc} USDC exceeds available Arc Testnet DEX pool liquidity (maximum single-swap limit on Arc Testnet is 10.00 USDC). Please try a smaller amount.`
+      );
+    }
+    throw new Error(`App Kit Swap operation failed: ${msg}`);
   }
 }
 
