@@ -8,7 +8,7 @@ dotenv.config();
  * Encrypt Entity Secret with a downloaded/pasted Circle Public Key PEM file
  */
 function encryptWithPem() {
-  const entitySecretHex = process.env.CIRCLE_ENTITY_SECRET || '99641183b6d3d5dd2f09295d48560fc9d071e73944fc2fb205ade1018ae1fae9';
+  const entitySecretHex = process.env.CIRCLE_ENTITY_SECRET || '';
   const pemFilePath = process.argv[2] || path.join(__dirname, '../public_key.pem');
 
   console.log('===========================================================');

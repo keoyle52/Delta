@@ -9,7 +9,7 @@ dotenv.config();
  * Outputs the exact Base64 Ciphertext required by Circle Developer Console.
  */
 async function generateEntitySecretCiphertext() {
-  const entitySecretHex = process.env.CIRCLE_ENTITY_SECRET || '99641183b6d3d5dd2f09295d48560fc9d071e73944fc2fb205ade1018ae1fae9';
+  const entitySecretHex = process.env.CIRCLE_ENTITY_SECRET || '';
   const apiKey = process.env.CIRCLE_API_KEY || '';
 
   console.log('===========================================================');
