@@ -124,7 +124,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     });
 
     // 2. Dispatch workflow execution event to Inngest Durable Execution Engine
-    await inngest.send({
+    const inngestRes = await inngest.send({
       name: 'workflow.trigger',
       data: {
         executionId: execution.id,
@@ -136,7 +136,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       },
     });
 
-    console.log(`✅ Workflow execution ${execution.id} dispatched to Inngest engine`);
+    console.log(`✅ Workflow execution ${execution.id} dispatched to Inngest engine. Event IDs: ${JSON.stringify(inngestRes?.ids || [])}`);
 
     // 3. Return immediate success response (< 300ms) to UI
     return NextResponse.json({
