@@ -49,6 +49,14 @@ export async function executeAppKitSwap({
   const kit = getAppKitInstance();
   const circleWalletsAdapter = getCircleWalletsAdapter();
 
+  console.log('[DEBUG APP KIT SWAP] Calling kit.swap with parameters:', JSON.stringify({
+    chain: 'Arc_Testnet',
+    address: userWalletAddress,
+    walletId: walletId || 'MISSING/UNDEFINED',
+    amountIn: amountUsdc,
+    tokenOut,
+  }));
+
   try {
     const swapResult = await kit.swap({
       from: {
@@ -110,14 +118,22 @@ export async function executeAppKitBridge({
       );
     }
 
+    console.log('[DEBUG APP KIT BRIDGE] Calling kit.bridge with parameters:', JSON.stringify({
+      chain: 'Arc_Testnet',
+      address: userWalletAddress,
+      destinationChain,
+      destinationAddress,
+      amount: amountUsdc,
+    }));
+
     // 2. Perform CCTP bridge call with forwarder-based destination (useForwarder: true is mandatory)
+    // Note: kit.bridge schema accepts { adapter, chain, address } without walletId
     const bridgeResult: any = await kit.bridge({
       from: {
         adapter: circleWalletsAdapter,
         chain: 'Arc_Testnet',
         address: userWalletAddress,
-        ...(walletId ? { walletId } : {}),
-      } as any,
+      },
       to: {
         chain: destinationChain,
         recipientAddress: destinationAddress,
@@ -152,14 +168,20 @@ export async function executeAppKitSend({
   const kit = getAppKitInstance();
   const circleWalletsAdapter = getCircleWalletsAdapter();
 
+  console.log('[DEBUG APP KIT SEND] Calling kit.send with parameters:', JSON.stringify({
+    chain: 'Arc_Testnet',
+    address: userWalletAddress,
+    destinationAddress,
+    amount: amountUsdc,
+  }));
+
   try {
     const sendResult = await kit.send({
       from: {
         adapter: circleWalletsAdapter,
         chain: 'Arc_Testnet',
         address: userWalletAddress,
-        ...(walletId ? { walletId } : {}),
-      } as any,
+      },
       to: destinationAddress,
       token: token as 'USDC' | 'EURC',
       amount: amountUsdc,

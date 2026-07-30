@@ -34,9 +34,9 @@ export async function createArcUserWallet(userId: string) {
   try {
     const idempotencyKey = randomUUID();
 
-    // Create EVM-compatible EOA wallet using testnet developer parameters
+    // Create EVM-compatible EOA wallet on Arc Testnet
     const response = await client.createWallets({
-      blockchains: ['ETH-SEPOLIA'],
+      blockchains: ['ARC-TESTNET' as any],
       count: 1,
       walletSetId,
       accountType: 'EOA',
