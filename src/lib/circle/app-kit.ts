@@ -8,6 +8,7 @@
 
 import { AppKit } from '@circle-fin/app-kit';
 import { createCircleWalletsAdapter } from '@circle-fin/adapter-circle-wallets';
+import { logger } from '@/lib/logger';
 
 export function getAppKitInstance() {
   return new AppKit();
@@ -49,7 +50,7 @@ export async function executeAppKitSwap({
   const kit = getAppKitInstance();
   const circleWalletsAdapter = getCircleWalletsAdapter();
 
-  console.log('[DEBUG APP KIT SWAP] Calling kit.swap with parameters:', JSON.stringify({
+  logger.debug('[APP KIT SWAP] Calling kit.swap with parameters:', JSON.stringify({
     chain: 'Arc_Testnet',
     address: userWalletAddress,
     walletId: walletId || 'MISSING/UNDEFINED',
@@ -124,7 +125,7 @@ export async function executeAppKitBridge({
       );
     }
 
-    console.log('[DEBUG APP KIT BRIDGE] Calling kit.bridge with parameters:', JSON.stringify({
+    logger.debug('[APP KIT BRIDGE] Calling kit.bridge with parameters:', JSON.stringify({
       chain: 'Arc_Testnet',
       address: userWalletAddress,
       destinationChain,
@@ -174,7 +175,7 @@ export async function executeAppKitSend({
   const kit = getAppKitInstance();
   const circleWalletsAdapter = getCircleWalletsAdapter();
 
-  console.log('[DEBUG APP KIT SEND] Calling kit.send with parameters:', JSON.stringify({
+  logger.debug('[APP KIT SEND] Calling kit.send with parameters:', JSON.stringify({
     chain: 'Arc_Testnet',
     address: userWalletAddress,
     destinationAddress,

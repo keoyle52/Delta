@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 function validateWorkflowPercentages(nodesInput: any): { valid: boolean; total: number; error?: string } {
   try {
@@ -64,6 +65,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const rateLimitRes = await checkRateLimit(req, 'workflows-update', { limit: 20, windowMs: 60 * 1000 });
+    if (rateLimitRes) return rateLimitRes;
+
     const session = await getServerSession(authOptions);
     if (!session || !session.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

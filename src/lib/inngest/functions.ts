@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { executeAppKitSwap, executeAppKitBridge, executeAppKitSend } from '@/lib/circle/app-kit';
 import { sendArcTransfer } from '@/lib/circle/wallets';
 import { getWalletBalances } from '@/lib/arc/rpc';
+import { validateWebhookUrl } from '@/lib/security/validateWebhookUrl';
+import { isValidEvmAddress, isValidSolanaAddress } from '@/lib/validation/address';
 
 /**
  * Inngest Durable Workflow Execution Function
@@ -216,8 +218,24 @@ export const executeWorkflowFunction = inngest.createFunction(
           } else if (nodeType === 'bridge') {
             const destinationAddress = nodeData.destinationAddress;
             const destinationChain = nodeData.destinationChain || 'Solana_Devnet';
-            if (!destinationAddress) {
-              throw new Error('Bridge node destinationAddress is required');
+
+            const isSolana = destinationChain === 'Solana_Devnet';
+            const isValidAddr = isSolana
+              ? isValidSolanaAddress(destinationAddress)
+              : isValidEvmAddress(destinationAddress);
+
+            if (!isValidAddr) {
+              const errMessage = `Invalid bridge destination address ("${destinationAddress || ''}") for target chain ${destinationChain}. ${isSolana ? 'Solana base58 address required.' : 'Valid EVM address required.'}`;
+              await updateLog({
+                stepId: node.id,
+                nodeType: 'bridge',
+                nodeName: nodeData.label || 'CCTP Bridge Action',
+                status: 'FAILED',
+                destinationChain,
+                error: errMessage,
+                details: errMessage,
+              });
+              return;
             }
 
             // Pre-flight Gas Reserve Validation
@@ -297,8 +315,18 @@ export const executeWorkflowFunction = inngest.createFunction(
             }
           } else if (nodeType === 'send') {
             const destinationAddress = nodeData.destinationAddress;
-            if (!destinationAddress) {
-              throw new Error('Send node destinationAddress is required');
+
+            if (!isValidEvmAddress(destinationAddress)) {
+              const errMessage = `Invalid send recipient EVM address ("${destinationAddress || ''}"). Valid EVM 0x address required.`;
+              await updateLog({
+                stepId: node.id,
+                nodeType: 'send',
+                nodeName: nodeData.label || 'Send Action',
+                status: 'FAILED',
+                error: errMessage,
+                details: errMessage,
+              });
+              return;
             }
 
             // Pre-flight Gas Reserve Validation
@@ -395,6 +423,20 @@ export const executeWorkflowFunction = inngest.createFunction(
               .replace('{{step}}', nodeData.label || 'Automation');
 
             if (webhookUrl) {
+              const urlValidation = await validateWebhookUrl(webhookUrl);
+              if (!urlValidation.valid) {
+                const blockReason = urlValidation.reason || 'Blocked: unsafe webhook URL';
+                await updateLog({
+                  stepId: node.id,
+                  nodeType: 'notify',
+                  nodeName: nodeData.label || 'Log Notification',
+                  status: 'FAILED',
+                  error: blockReason,
+                  details: blockReason,
+                });
+                return;
+              }
+
               try {
                 await fetch(webhookUrl, {
                   method: 'POST',

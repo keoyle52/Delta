@@ -65,3 +65,20 @@ npm run inngest:dev
 ## 🏛️ Built on Arc Attribution Note
 
 Delta is purpose-built for the **Circle Arc Hackathon**. All native gas fees and transaction settlements on Arc Testnet use **USDC** with sub-second deterministic finality.
+
+---
+
+## 🔒 Production Security Checklist
+
+Before deploying Delta to production environments, complete the following security verifications:
+
+1. **Rotate `NEXTAUTH_SECRET`**:
+   Replace default secret with a strong random 32+ character key (`openssl rand -hex 32`).
+2. **Configure Demo Login Flags**:
+   Set `ENABLE_DEMO_LOGIN="false"` in production unless explicitly running a restricted demo deployment.
+   If enabled, set `DEMO_LOGIN_SECRET` to a strong non-guessable passcode in `.env`.
+3. **Rotate RPC & Provider API Keys**:
+   Replace any test Alchemy keys (`ARC_RPC_PRIMARY`) and Circle API keys (`CIRCLE_API_KEY`) with production-scoped tokens.
+4. **Enforce Rate Limiting & Webhook Validation**:
+   Verify that SSRF protection (`validateWebhookUrl`) and rate limiting middleware (`checkRateLimit`) remain active across all endpoint handlers.
+

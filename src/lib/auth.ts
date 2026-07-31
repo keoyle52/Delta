@@ -86,9 +86,17 @@ export const authOptions: NextAuthOptions = {
           }
         }
 
-        // Strictly restrict 1-Click Jury Demo access to demo accounts ONLY
+        // Strictly restrict 1-Click Jury Demo access to demo accounts ONLY with secure environment controls
         const isDemoAccount = email === 'demo@delta.build' || email === 'demo-test-user@delta.app';
-        const isDemoBypass = isDemoAccount && (inputCode === '123456' || inputCode === 'demo');
+        const isDemoEnabled = process.env.NODE_ENV !== 'production' || process.env.ENABLE_DEMO_LOGIN === 'true';
+        const demoSecret = process.env.DEMO_LOGIN_SECRET || (process.env.NODE_ENV !== 'production' ? 'demo' : undefined);
+
+        const isDemoBypass = isDemoEnabled && isDemoAccount && !!demoSecret && inputCode === demoSecret;
+
+        if (isDemoAccount && !isDemoBypass && !isVerifiedPrivyUser) {
+          // Add brute-force mitigation delay on failed demo attempts
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
 
         const isValidAccess = isVerifiedPrivyUser || isDemoBypass;
 
@@ -113,6 +121,22 @@ export const authOptions: NextAuthOptions = {
           userWallet = await getOrCreateUserWallet(user.id);
         } catch (walletErr: any) {
           console.warn('Wallet provisioning warning during login:', walletErr.message);
+        }
+
+        // 4. Demo Wallet High-Balance Guard
+        if (isDemoAccount && userWallet?.address) {
+          try {
+            const { getWalletBalances } = await import('@/lib/arc/rpc');
+            const balances = await getWalletBalances(userWallet.address);
+            const usdcBal = parseFloat(balances.usdc || '0');
+            if (usdcBal > 5.0) {
+              console.warn(
+                `[DEMO WALLET GUARD] High balance warning: Demo wallet ${email} (${userWallet.address}) holds ${usdcBal.toFixed(2)} USDC (> 5.0 USDC threshold).`
+              );
+            }
+          } catch (balErr: any) {
+            console.warn('[DEMO WALLET GUARD] Failed to check demo wallet balance:', balErr.message);
+          }
         }
 
         return {

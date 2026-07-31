@@ -1,5 +1,6 @@
 import { createPublicKey, verify as cryptoVerify } from 'crypto';
 import axios from 'axios';
+import { logger } from '@/lib/logger';
 
 // In-memory cache for Circle public keys (Key ID -> { publicKeyPem/Der, expiresAt })
 interface CachedKey {
@@ -19,7 +20,7 @@ export async function getCirclePublicKeyDer(keyId: string): Promise<string> {
   const now = Date.now();
 
   if (cached && cached.expiresAt > now) {
-    console.log('[DEBUG WEBHOOK] Using cached public key for keyId:', keyId);
+    logger.debug('[WEBHOOK] Using cached public key for keyId:', keyId);
     return cached.publicKeyDerBase64;
   }
 
@@ -30,7 +31,7 @@ export async function getCirclePublicKeyDer(keyId: string): Promise<string> {
 
   try {
     const url = `https://api.circle.com/v2/notifications/publicKey/${keyId}`;
-    console.log(`[DEBUG WEBHOOK] Fetching Public Key from Circle v2 API: ${url}`);
+    logger.debug(`[WEBHOOK] Fetching Public Key from Circle v2 API: ${url}`);
 
     const response = await axios.get(url, {
       headers: {
@@ -40,7 +41,7 @@ export async function getCirclePublicKeyDer(keyId: string): Promise<string> {
       timeout: 5000,
     });
 
-    console.log('[DEBUG WEBHOOK] Public Key Fetch Response Status:', response.status);
+    logger.debug('[WEBHOOK] Public Key Fetch Response Status:', response.status);
 
     const publicKeyBase64 = response.data?.data?.publicKey || response.data?.publicKey;
 

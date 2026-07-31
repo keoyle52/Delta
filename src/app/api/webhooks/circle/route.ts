@@ -3,6 +3,7 @@ import { verifyCircleWebhookSignature } from '@/lib/circle/webhook';
 import { prisma } from '@/lib/prisma';
 import { inngest } from '@/lib/inngest/client';
 import { sendExecutionNotificationEmail } from '@/lib/email';
+import { logger } from '@/lib/logger';
 
 export async function POST(req: NextRequest) {
   try {
@@ -32,8 +33,8 @@ export async function POST(req: NextRequest) {
     const signatureHeader = req.headers.get('x-circle-signature');
     const keyIdHeader = req.headers.get('x-circle-key-id');
 
-    console.log('[DEBUG WEBHOOK] Incoming Request Received!');
-    console.log('[DEBUG WEBHOOK] KeyId:', keyIdHeader);
+    logger.debug('[WEBHOOK] Incoming Request Received!');
+    logger.debug('[WEBHOOK] KeyId:', keyIdHeader);
 
     // 2. Cryptographic signature verification (v2 ECDSA SHA-256)
     const verification = await verifyCircleWebhookSignature({
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
     // 3. Parse JSON payload (already parsed at top)
     const notificationType = payload.notificationType || '';
 
-    console.log('[DEBUG WEBHOOK] notificationType:', notificationType);
+    logger.debug('[WEBHOOK] notificationType:', notificationType);
 
     const eventData = payload.notification || payload.event || payload;
     const rawTxType = (eventData.transactionType || eventData.type || eventData.operation || eventData.direction || '').toUpperCase();
@@ -64,7 +65,7 @@ export async function POST(req: NextRequest) {
 
     if (isMatchingType) {
       if (rawTxType === 'OUTBOUND' || rawTxType.includes('SWAP') || rawTxType.includes('INTERNAL')) {
-        console.log('[DEBUG WEBHOOK] Ignored OUTBOUND/SWAP/INTERNAL transaction to prevent self-trigger loop');
+        logger.debug('[WEBHOOK] Ignored OUTBOUND/SWAP/INTERNAL transaction to prevent self-trigger loop');
         return NextResponse.json({ success: true, message: 'Ignored non-inbound or swap transaction' });
       }
 
@@ -89,7 +90,7 @@ export async function POST(req: NextRequest) {
         tokenAddress === '0x89b50855aa3be2f677cd6303cec089b5f319d72a';
 
       if (isEurc || (tokenSymbol && tokenSymbol !== 'USDC' && tokenSymbol !== 'USD')) {
-        console.log(`[DEBUG WEBHOOK] Ignored non-USDC inbound transfer (token: ${tokenSymbol || tokenAddress}) to prevent swap loop.`);
+        logger.debug(`[WEBHOOK] Ignored non-USDC inbound transfer (token: ${tokenSymbol || tokenAddress}) to prevent swap loop.`);
         return NextResponse.json({ success: true, message: 'Ignored non-USDC inbound transfer' });
       }
 
@@ -121,15 +122,15 @@ export async function POST(req: NextRequest) {
       });
 
       if (existingExecution) {
-        console.log(`[DEBUG WEBHOOK] Ignored duplicate txHash: ${txHash}`);
+        logger.debug(`[WEBHOOK] Ignored duplicate txHash: ${txHash}`);
         return NextResponse.json({ success: true, message: 'Transaction already processed' });
       }
 
-      console.log('[DEBUG WEBHOOK] Matched INBOUND USDC payload fields:');
-      console.log('   walletId:', walletId);
-      console.log('   destinationAddress:', destinationAddress);
-      console.log('   sourceAddress:', sourceAddress);
-      console.log('   transferAmountStr:', transferAmountStr);
+      logger.debug('[WEBHOOK] Matched INBOUND USDC payload fields:');
+      logger.debug('   walletId:', walletId);
+      logger.debug('   destinationAddress:', destinationAddress);
+      logger.debug('   sourceAddress:', sourceAddress);
+      logger.debug('   transferAmountStr:', transferAmountStr);
 
       if ((transferState === 'COMPLETE' || transferState === 'SUCCESS' || transferState === 'CONFIRMED')) {
         // Find matching custodial wallet in DB by address OR by circleWalletId
@@ -155,11 +156,11 @@ export async function POST(req: NextRequest) {
           // FIX D: IGNORE SENDER IF IT MATCHES USER'S OWN CUSTODIAL WALLET OR ADAPTER
           const userWalletAddr = wallet.address.toLowerCase();
           if (sourceAddress && (sourceAddress === userWalletAddr || sourceAddress === destinationAddress)) {
-            console.log(`[DEBUG WEBHOOK] Ignored transfer originating from user's own wallet/adapter (${sourceAddress})`);
+            logger.debug(`[WEBHOOK] Ignored transfer originating from user's own wallet/adapter (${sourceAddress})`);
             return NextResponse.json({ success: true, message: 'Ignored internal wallet/adapter transfer' });
           }
 
-          console.log(`[DEBUG WEBHOOK] Found Wallet in DB! Address: ${wallet.address} | Workflows: ${wallet.user.workflows.length}`);
+          logger.debug(`[WEBHOOK] Found Wallet in DB! Address: ${wallet.address} | Workflows: ${wallet.user.workflows.length}`);
           let triggeredCount = 0;
 
           for (const workflow of wallet.user.workflows) {
@@ -174,7 +175,7 @@ export async function POST(req: NextRequest) {
             });
 
             if (recentExecution) {
-              console.log(`[DEBUG WEBHOOK] Workflow ${workflow.id} is on 120s cooldown. Skipping trigger.`);
+              logger.debug(`[WEBHOOK] Workflow ${workflow.id} is on 120s cooldown. Skipping trigger.`);
               continue;
             }
 
@@ -188,7 +189,7 @@ export async function POST(req: NextRequest) {
                 : Infinity;
 
               if (transferAmount >= minAmount && transferAmount <= maxAmount) {
-                console.log(`[DEBUG WEBHOOK] Triggering Workflow ID: ${workflow.id}`);
+                logger.debug(`[WEBHOOK] Triggering Workflow ID: ${workflow.id}`);
 
                 // 1. Create DB execution record
                 const execution = await prisma.execution.create({

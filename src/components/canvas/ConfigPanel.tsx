@@ -1,6 +1,7 @@
 'use client';
 
-import { Trash2, Settings, AlertCircle } from 'lucide-react';
+import { Trash2, Settings, AlertCircle, AlertTriangle } from 'lucide-react';
+import { isValidEvmAddress, isValidSolanaAddress } from '@/lib/validation/address';
 
 interface ConfigPanelProps {
   selectedNode: any;
@@ -138,7 +139,18 @@ export default function ConfigPanel({ selectedNode, onUpdateNode, onDeleteNode }
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-slate-300">Destination Recipient Address</label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-slate-300">Destination Recipient Address</label>
+                {data.destinationAddress && !(
+                  (data.destinationChain || 'Solana_Devnet') === 'Solana_Devnet'
+                    ? isValidSolanaAddress(data.destinationAddress)
+                    : isValidEvmAddress(data.destinationAddress)
+                ) && (
+                  <span className="text-[10px] text-red-400 font-semibold flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" /> Invalid Address
+                  </span>
+                )}
+              </div>
               <input
                 type="text"
                 placeholder={
@@ -148,7 +160,15 @@ export default function ConfigPanel({ selectedNode, onUpdateNode, onDeleteNode }
                 }
                 value={data.destinationAddress || ''}
                 onChange={(e) => handleChange('destinationAddress', e.target.value)}
-                className="w-full rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none font-mono text-xs"
+                className={`w-full rounded-lg border px-3 py-2 text-sm text-slate-200 focus:outline-none font-mono text-xs ${
+                  data.destinationAddress && !(
+                    (data.destinationChain || 'Solana_Devnet') === 'Solana_Devnet'
+                      ? isValidSolanaAddress(data.destinationAddress)
+                      : isValidEvmAddress(data.destinationAddress)
+                  )
+                    ? 'border-red-500/80 bg-red-950/20 focus:border-red-500'
+                    : 'border-slate-800 bg-slate-900 focus:border-blue-500'
+                }`}
               />
               <p className="text-[11px] text-slate-500">
                 Circle CCTP forwarder mints to recipient address on target chain (0x address for EVM, base58 for Solana).
@@ -173,13 +193,24 @@ export default function ConfigPanel({ selectedNode, onUpdateNode, onDeleteNode }
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-slate-300">Recipient EVM Address</label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-slate-300">Recipient EVM Address</label>
+                {data.destinationAddress && !isValidEvmAddress(data.destinationAddress) && (
+                  <span className="text-[10px] text-red-400 font-semibold flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" /> Invalid EVM Address
+                  </span>
+                )}
+              </div>
               <input
                 type="text"
                 placeholder="0x..."
                 value={data.destinationAddress || ''}
                 onChange={(e) => handleChange('destinationAddress', e.target.value)}
-                className="w-full rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-amber-500 focus:outline-none font-mono text-xs"
+                className={`w-full rounded-lg border px-3 py-2 text-sm text-slate-200 focus:outline-none font-mono text-xs ${
+                  data.destinationAddress && !isValidEvmAddress(data.destinationAddress)
+                    ? 'border-red-500/80 bg-red-950/20 focus:border-red-500'
+                    : 'border-slate-800 bg-slate-900 focus:border-amber-500'
+                }`}
               />
             </div>
           </div>

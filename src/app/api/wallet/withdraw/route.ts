@@ -4,9 +4,14 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { sendArcTransfer } from '@/lib/circle/wallets';
 import { executeAppKitSend } from '@/lib/circle/app-kit';
+import { isValidEvmAddress } from '@/lib/validation/address';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 export async function POST(req: NextRequest) {
   try {
+    const rateLimitRes = await checkRateLimit(req, 'wallet-withdraw', { limit: 5, windowMs: 60 * 1000 });
+    if (rateLimitRes) return rateLimitRes;
+
     const session = await getServerSession(authOptions);
     if (!session || !session.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -16,9 +21,9 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const { destinationAddress, amount, token = 'USDC' } = body;
 
-    if (!destinationAddress || !destinationAddress.startsWith('0x') || destinationAddress.length !== 42) {
+    if (!isValidEvmAddress(destinationAddress)) {
       return NextResponse.json(
-        { error: 'Invalid destination address. Please provide a valid 42-character EVM address (0x...)' },
+        { error: 'Invalid destination address. Please provide a valid EVM address (0x...)' },
         { status: 400 }
       );
     }
