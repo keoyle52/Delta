@@ -1,17 +1,28 @@
 'use client';
 
 import { Handle, Position } from '@xyflow/react';
-import { Send } from 'lucide-react';
+import { Send, AlertTriangle } from 'lucide-react';
+import { isValidEvmAddress } from '@/lib/validation/address';
 
 export default function SendNode({ data, selected }: { data: any; selected?: boolean }) {
+  const hasConfigError = !data.destinationAddress || !isValidEvmAddress(data.destinationAddress);
+
   return (
     <div
-      className={`min-w-[220px] rounded-xl border-2 bg-slate-900/90 p-4 shadow-xl backdrop-blur-md transition-all ${
+      className={`min-w-[220px] rounded-xl border-2 bg-slate-900/90 p-4 shadow-xl backdrop-blur-md transition-all relative ${
         selected
           ? 'border-amber-400 ring-4 ring-amber-500/20 shadow-amber-500/20'
           : 'border-amber-500/60 hover:border-amber-400'
       }`}
     >
+      {hasConfigError && (
+        <div
+          className="absolute -top-2 -right-2 flex h-5.5 w-5.5 items-center justify-center rounded-full bg-amber-500 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/50 animate-pulse"
+          title="Missing or invalid recipient EVM address"
+        >
+          !
+        </div>
+      )}
       <Handle
         type="target"
         position={Position.Left}

@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { Trash2, Settings, AlertCircle, AlertTriangle } from 'lucide-react';
 import { isValidEvmAddress, isValidSolanaAddress } from '@/lib/validation/address';
 
@@ -10,6 +11,8 @@ interface ConfigPanelProps {
 }
 
 export default function ConfigPanel({ selectedNode, onUpdateNode, onDeleteNode }: ConfigPanelProps) {
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
   if (!selectedNode) {
     return (
       <aside className="w-72 border-l border-slate-800 bg-slate-950/90 p-5 flex flex-col justify-center items-center text-center text-slate-500">
@@ -25,6 +28,16 @@ export default function ConfigPanel({ selectedNode, onUpdateNode, onDeleteNode }
     onUpdateNode(id, { ...data, [key]: value });
   };
 
+  const handleDeleteClick = () => {
+    if (confirmingDelete) {
+      onDeleteNode(id);
+      setConfirmingDelete(false);
+    } else {
+      setConfirmingDelete(true);
+      setTimeout(() => setConfirmingDelete(false), 3000);
+    }
+  };
+
   return (
     <aside className="w-80 border-l border-slate-800 bg-slate-950/90 p-5 flex flex-col justify-between overflow-y-auto">
       <div className="space-y-5">
@@ -35,13 +48,24 @@ export default function ConfigPanel({ selectedNode, onUpdateNode, onDeleteNode }
             </span>
             <h3 className="text-base font-semibold text-white">{data.label || type}</h3>
           </div>
-          <button
-            onClick={() => onDeleteNode(id)}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
-            title="Delete node"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+          {confirmingDelete ? (
+            <button
+              onClick={handleDeleteClick}
+              className="flex items-center gap-1.5 rounded-lg border border-red-500/80 bg-red-500/20 px-2.5 py-1 text-xs font-bold text-red-300 hover:bg-red-500/30 transition-all animate-pulse"
+              title="Click again to confirm deletion"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span>Confirm?</span>
+            </button>
+          ) : (
+            <button
+              onClick={handleDeleteClick}
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+              title="Delete node"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
         </div>
 
         {/* Common Label Field */}

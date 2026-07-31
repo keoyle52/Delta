@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   ReactFlow,
   Controls,
+  MiniMap,
   Background,
   applyNodeChanges,
   applyEdgeChanges,
@@ -12,6 +13,9 @@ import {
   Node,
   Edge,
   OnConnect,
+  ReactFlowProvider,
+  useReactFlow,
+  Connection,
 } from '@xyflow/react';
 
 import TriggerNode from './nodes/TriggerNode';
@@ -20,10 +24,23 @@ import BridgeNode from './nodes/BridgeNode';
 import SendNode from './nodes/SendNode';
 import NotifyNode from './nodes/NotifyNode';
 import HoldNode from './nodes/HoldNode';
+import CustomLabeledEdge from './edges/CustomLabeledEdge';
 
 import NodePalette from './NodePalette';
 import ConfigPanel from './ConfigPanel';
-import { Save, AlertTriangle, CheckCircle2, Play, ArrowLeft } from 'lucide-react';
+import { ToastProvider, useToast } from '@/components/ui/Toast';
+import {
+  Save,
+  AlertTriangle,
+  CheckCircle2,
+  Play,
+  ArrowLeft,
+  Undo2,
+  Redo2,
+  Sparkles,
+  LayoutGrid,
+  Activity,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -35,7 +52,7 @@ interface WorkflowCanvasProps {
   isActive: boolean;
 }
 
-export default function WorkflowCanvas({
+function InnerWorkflowCanvas({
   workflowId,
   initialName,
   initialNodes,
@@ -43,8 +60,13 @@ export default function WorkflowCanvas({
   isActive: initialIsActive,
 }: WorkflowCanvasProps) {
   const router = useRouter();
+  const reactFlowInstance = useReactFlow();
+  const { addToast } = useToast();
+
   const [name, setName] = useState(initialName);
   const [isActive, setIsActive] = useState(initialIsActive);
+  const [isDirty, setIsDirty] = useState(false);
+
   const [nodes, setNodes] = useState<Node[]>(
     initialNodes.length > 0
       ? initialNodes
@@ -58,13 +80,13 @@ export default function WorkflowCanvas({
           {
             id: 'node-swap-1',
             type: 'swap',
-            position: { x: 340, y: 50 },
+            position: { x: 360, y: 60 },
             data: { label: 'Swap EURC', percentage: '50', tokenOut: 'EURC' },
           },
           {
             id: 'node-notify-1',
             type: 'notify',
-            position: { x: 340, y: 220 },
+            position: { x: 360, y: 240 },
             data: { label: 'Notify Alert', template: 'Delta Automation Executed: {{amount}} USDC' },
           },
         ]
@@ -74,8 +96,8 @@ export default function WorkflowCanvas({
     initialEdges.length > 0
       ? initialEdges
       : [
-          { id: 'edge-1', source: 'node-trigger-1', target: 'node-swap-1' },
-          { id: 'edge-2', source: 'node-trigger-1', target: 'node-notify-1' },
+          { id: 'edge-1', source: 'node-trigger-1', target: 'node-swap-1', type: 'custom' },
+          { id: 'edge-2', source: 'node-trigger-1', target: 'node-notify-1', type: 'custom' },
         ]
   );
 
@@ -83,7 +105,101 @@ export default function WorkflowCanvas({
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
-  // Register custom node components
+  // Live Canvas Execution Visualization State
+  const [executionState, setExecutionState] = useState<{
+    running: boolean;
+    activeExecutionId?: string;
+    stepStatuses: Record<string, 'RUNNING' | 'COMPLETE' | 'FAILED'>;
+  }>({ running: false, stepStatuses: {} });
+
+  // History Stack for Undo/Redo (30 steps max)
+  const historyRef = useRef<{ nodes: Node[]; edges: Edge[] }[]>([]);
+  const historyIndexRef = useRef<number>(-1);
+  const isHistoryActionRef = useRef<boolean>(false);
+
+  const saveHistory = useCallback((newNodes: Node[], newEdges: Edge[]) => {
+    if (isHistoryActionRef.current) {
+      isHistoryActionRef.current = false;
+      return;
+    }
+    const current = historyRef.current.slice(0, historyIndexRef.current + 1);
+    current.push({
+      nodes: JSON.parse(JSON.stringify(newNodes)),
+      edges: JSON.parse(JSON.stringify(newEdges)),
+    });
+    if (current.length > 30) current.shift();
+    historyRef.current = current;
+    historyIndexRef.current = current.length - 1;
+  }, []);
+
+  // Save initial state to history once
+  useEffect(() => {
+    if (historyRef.current.length === 0) {
+      saveHistory(nodes, edges);
+    }
+  }, []);
+
+  const handleUndo = useCallback(() => {
+    if (historyIndexRef.current > 0) {
+      historyIndexRef.current -= 1;
+      const targetState = historyRef.current[historyIndexRef.current];
+      isHistoryActionRef.current = true;
+      setNodes(JSON.parse(JSON.stringify(targetState.nodes)));
+      setEdges(JSON.parse(JSON.stringify(targetState.edges)));
+      setIsDirty(true);
+      addToast('Undo Action', 'info', 'Reverted canvas to previous state');
+    }
+  }, [addToast]);
+
+  const handleRedo = useCallback(() => {
+    if (historyIndexRef.current < historyRef.current.length - 1) {
+      historyIndexRef.current += 1;
+      const targetState = historyRef.current[historyIndexRef.current];
+      isHistoryActionRef.current = true;
+      setNodes(JSON.parse(JSON.stringify(targetState.nodes)));
+      setEdges(JSON.parse(JSON.stringify(targetState.edges)));
+      setIsDirty(true);
+      addToast('Redo Action', 'info', 'Re-applied canvas change');
+    }
+  }, [addToast]);
+
+  // Keyboard listener for Ctrl+Z / Ctrl+Y
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        if (e.shiftKey) {
+          handleRedo();
+        } else {
+          handleUndo();
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        handleRedo();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleUndo, handleRedo]);
+
+  // Unsaved changes browser beforeunload listener
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isDirty]);
+
+  // Calculate total allocation percentage across action nodes
+  const totalAllocation = useMemo(() => {
+    return nodes
+      .filter((n) => n.type !== 'trigger')
+      .reduce((sum, n) => sum + (parseFloat(n.data?.percentage as string) || 0), 0);
+  }, [nodes]);
+
+  // Register custom node & edge components
   const nodeTypes = useMemo(
     () => ({
       trigger: TriggerNode,
@@ -96,72 +212,231 @@ export default function WorkflowCanvas({
     []
   );
 
-  const onNodesChange = useCallback(
-    (changes: any) => setNodes((nds) => applyNodeChanges(changes, nds)),
+  const edgeTypes = useMemo(
+    () => ({
+      custom: CustomLabeledEdge,
+    }),
     []
+  );
+
+  // Connection validation
+  const isValidConnection = useCallback(
+    (connection: any) => {
+      const targetId = connection.target;
+      const sourceId = connection.source;
+      const targetNode = nodes.find((n) => n.id === targetId);
+
+      if (targetNode?.type === 'trigger') {
+        addToast('Invalid Connection', 'warning', 'Trigger nodes cannot accept incoming connections.');
+        return false;
+      }
+      if (sourceId && targetId && sourceId === targetId) {
+        addToast('Invalid Connection', 'warning', 'Cannot connect a node to itself.');
+        return false;
+      }
+      return true;
+    },
+    [nodes, addToast]
+  );
+
+  const onNodesChange = useCallback(
+    (changes: any) => {
+      setNodes((nds) => {
+        const nextNodes = applyNodeChanges(changes, nds);
+        saveHistory(nextNodes, edges);
+        return nextNodes;
+      });
+      setIsDirty(true);
+    },
+    [edges, saveHistory]
   );
 
   const onEdgesChange = useCallback(
-    (changes: any) => setEdges((eds) => applyEdgeChanges(changes, eds)),
-    []
+    (changes: any) => {
+      setEdges((eds) => {
+        const nextEdges = applyEdgeChanges(changes, eds);
+        saveHistory(nodes, nextEdges);
+        return nextEdges;
+      });
+      setIsDirty(true);
+    },
+    [nodes, saveHistory]
   );
 
   const onConnect: OnConnect = useCallback(
-    (params) => setEdges((eds) => addEdge({ ...params, animated: true }, eds)),
-    []
+    (params) => {
+      const targetNode = nodes.find((n) => n.id === params.target);
+      const targetPercentage = targetNode?.data?.percentage;
+
+      const newEdge: Edge = {
+        ...params,
+        id: `edge-${params.source}-${params.target}-${Date.now().toString(16)}`,
+        type: 'custom',
+        animated: true,
+        data: { percentage: targetPercentage },
+      };
+
+      setEdges((eds) => {
+        const nextEdges = addEdge(newEdge, eds);
+        saveHistory(nodes, nextEdges);
+        return nextEdges;
+      });
+      setIsDirty(true);
+      addToast('Nodes Connected', 'info', `Linked ${params.source} → ${params.target}`);
+    },
+    [nodes, saveHistory, addToast]
   );
 
   const onNodeClick = useCallback((_: any, node: Node) => {
     setSelectedNode(node);
   }, []);
 
-  const handleAddNode = useCallback(
-    (type: string) => {
+  const handleAddNodeAtPosition = useCallback(
+    (type: string, position?: { x: number; y: number }) => {
+      // Limit to 1 trigger node
+      if (type === 'trigger') {
+        const existingTrigger = nodes.find((n) => n.type === 'trigger');
+        if (existingTrigger) {
+          addToast('Trigger Exists', 'warning', 'Workflows are limited to one USDC Received trigger node.');
+          return;
+        }
+      }
+
       const newNodeId = `node-${type}-${Date.now().toString(16)}`;
-      const position = {
-        x: Math.floor(Math.random() * 200) + 200,
-        y: Math.floor(Math.random() * 200) + 100,
+      const nodePos = position || {
+        x: Math.floor(Math.random() * 150) + 300,
+        y: Math.floor(Math.random() * 150) + 100,
       };
 
       let nodeData: any = { label: `${type.toUpperCase()} Node` };
       if (type === 'trigger') nodeData = { label: 'USDC Received', minAmount: '1.00' };
-      if (type === 'swap') nodeData = { label: 'Swap Token', percentage: '50', tokenOut: 'EURC' };
+      if (type === 'swap') nodeData = { label: 'Swap Token', percentage: '40', tokenOut: 'EURC' };
       if (type === 'bridge') nodeData = { label: 'CCTP Bridge', percentage: '30', destinationChain: 'Solana_Devnet' };
       if (type === 'send') nodeData = { label: 'Send USDC', percentage: '20' };
       if (type === 'notify') nodeData = { label: 'Notify Alert', template: 'Delta Executed {{amount}} USDC' };
-      if (type === 'hold') nodeData = { label: 'Keep Safe', percentage: '10' };
+      if (type === 'hold') nodeData = { label: 'Keep Remainder', percentage: '10' };
 
       const newNode: Node = {
         id: newNodeId,
         type,
-        position,
+        position: nodePos,
         data: nodeData,
       };
 
-      setNodes((nds) => [...nds, newNode]);
+      setNodes((nds) => {
+        const nextNodes = [...nds, newNode];
+        saveHistory(nextNodes, edges);
+        return nextNodes;
+      });
+      setIsDirty(true);
+      setSelectedNode(newNode);
+      addToast('Node Added', 'success', `Added ${nodeData.label} to canvas`);
     },
-    []
+    [nodes, edges, saveHistory, addToast]
   );
 
-  const handleUpdateNodeData = useCallback((nodeId: string, newData: any) => {
-    setNodes((nds) =>
-      nds.map((node) => {
-        if (node.id === nodeId) {
-          return { ...node, data: { ...node.data, ...newData } };
+  // Drag and Drop handlers on canvas container
+  const onDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  }, []);
+
+  const onDrop = useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault();
+      const type = event.dataTransfer.getData('application/reactflow');
+      if (!type) return;
+
+      const position = reactFlowInstance?.screenToFlowPosition
+        ? reactFlowInstance.screenToFlowPosition({ x: event.clientX, y: event.clientY })
+        : { x: event.clientX - 300, y: event.clientY - 120 };
+
+      handleAddNodeAtPosition(type, position);
+    },
+    [reactFlowInstance, handleAddNodeAtPosition]
+  );
+
+  const handleUpdateNodeData = useCallback(
+    (nodeId: string, newData: any) => {
+      setNodes((nds) => {
+        const nextNodes = nds.map((node) => {
+          if (node.id === nodeId) {
+            return { ...node, data: { ...node.data, ...newData } };
+          }
+          return node;
+        });
+
+        // Update connected edges with updated percentage
+        if (newData.percentage) {
+          setEdges((eds) =>
+            eds.map((e) => (e.target === nodeId ? { ...e, data: { ...e.data, percentage: newData.percentage } } : e))
+          );
         }
-        return node;
-      })
-    );
-    setSelectedNode((prev) => (prev?.id === nodeId ? { ...prev, data: { ...prev.data, ...newData } } : prev));
-  }, []);
 
-  const handleDeleteNode = useCallback((nodeId: string) => {
-    setNodes((nds) => nds.filter((node) => node.id !== nodeId));
-    setEdges((eds) => eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId));
-    setSelectedNode(null);
-  }, []);
+        saveHistory(nextNodes, edges);
+        return nextNodes;
+      });
 
+      setSelectedNode((prev) => (prev?.id === nodeId ? { ...prev, data: { ...prev.data, ...newData } } : prev));
+      setIsDirty(true);
+    },
+    [edges, saveHistory]
+  );
+
+  const handleDeleteNode = useCallback(
+    (nodeId: string) => {
+      setNodes((nds) => {
+        const nextNodes = nds.filter((node) => node.id !== nodeId);
+        const nextEdges = edges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId);
+        setEdges(nextEdges);
+        saveHistory(nextNodes, nextEdges);
+        return nextNodes;
+      });
+      setSelectedNode(null);
+      setIsDirty(true);
+      addToast('Node Removed', 'info', `Deleted node ${nodeId} from canvas`);
+    },
+    [edges, saveHistory, addToast]
+  );
+
+  // Auto Arrange / Auto-Layout Nodes Hierarchically
+  const handleAutoArrange = useCallback(() => {
+    const triggerNodes = nodes.filter((n) => n.type === 'trigger');
+    const actionNodes = nodes.filter((n) => n.type !== 'trigger');
+
+    let newNodes: Node[] = [];
+    if (triggerNodes.length > 0) {
+      newNodes.push({
+        ...triggerNodes[0],
+        position: { x: 60, y: 180 },
+      });
+    }
+
+    actionNodes.forEach((node, index) => {
+      const yOffset = 60 + index * 140;
+      newNodes.push({
+        ...node,
+        position: { x: 380, y: yOffset },
+      });
+    });
+
+    setNodes(newNodes);
+    saveHistory(newNodes, edges);
+    setIsDirty(true);
+    addToast('Auto Arranged', 'success', 'Hierarchical layout applied to canvas');
+  }, [nodes, edges, saveHistory, addToast]);
+
+  // Save Flow to API
   const handleSave = async () => {
+    if (totalAllocation > 100) {
+      addToast(
+        'Allocation Exceeded',
+        'error',
+        `Total allocation percentage (${totalAllocation}%) exceeds 100%. Please adjust node allocations.`
+      );
+      return;
+    }
+
     setSaving(true);
     setSaveStatus('idle');
     try {
@@ -178,28 +453,117 @@ export default function WorkflowCanvas({
 
       if (res.ok) {
         setSaveStatus('success');
+        setIsDirty(false);
+        addToast('Workflow Saved', 'success', 'All changes updated successfully on Arc Testnet.');
         setTimeout(() => setSaveStatus('idle'), 3000);
       } else {
+        const errData = await res.json();
         setSaveStatus('error');
+        addToast('Save Failed', 'error', errData.error || 'Failed to save workflow canvas');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
       setSaveStatus('error');
+      addToast('Save Error', 'error', err.message || 'Network error saving workflow');
     } finally {
       setSaving(false);
     }
   };
 
+  // Live Execution Test Trigger (Stays on Canvas + Visual Execution Highlights)
   const handleManualTestTrigger = async () => {
     try {
-      await fetch(`/api/workflows/${workflowId}/executions`, {
+      setExecutionState({ running: true, stepStatuses: {} });
+      addToast('Execution Triggered', 'info', 'Simulated 20 USDC deposit dispatched to execution worker...');
+
+      const res = await fetch(`/api/workflows/${workflowId}/executions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount: '20.00' }),
       });
-      router.push(`/workflows/${workflowId}/executions`);
-    } catch (err) {
+      const data = await res.json();
+
+      if (res.ok && data.id) {
+        const executionId = data.id;
+        setExecutionState((prev) => ({ ...prev, activeExecutionId: executionId }));
+
+        // Poll execution status for live canvas visual feedback
+        let attempts = 0;
+        const pollInterval = setInterval(async () => {
+          attempts++;
+          try {
+            const execRes = await fetch(`/api/workflows/${workflowId}/executions`);
+            const execLogs = await execRes.json();
+            if (Array.isArray(execLogs)) {
+              const currentExec = execLogs.find((e: any) => e.id === executionId);
+              if (currentExec) {
+                const logs = typeof currentExec.stepLogs === 'string' ? JSON.parse(currentExec.stepLogs) : (currentExec.stepLogs || []);
+                const statuses: Record<string, any> = {};
+
+                logs.forEach((log: any) => {
+                  statuses[log.stepId] = log.status;
+                });
+
+                setExecutionState((prev) => ({ ...prev, stepStatuses: statuses }));
+
+                if (currentExec.status === 'COMPLETED' || currentExec.status === 'FAILED' || attempts > 15) {
+                  clearInterval(pollInterval);
+                  setExecutionState((prev) => ({ ...prev, running: false }));
+                  if (currentExec.status === 'COMPLETED') {
+                    addToast('Execution Complete', 'success', 'All canvas nodes executed cleanly!');
+                  }
+                }
+              }
+            }
+          } catch (pollErr) {
+            console.error('Polling execution status error:', pollErr);
+          }
+        }, 1000);
+      }
+    } catch (err: any) {
       console.error(err);
+      setExecutionState({ running: false, stepStatuses: {} });
+      addToast('Trigger Failed', 'error', err.message || 'Failed to dispatch test execution');
+    }
+  };
+
+  // Enriched styled nodes with live execution rings
+  const styledNodes = useMemo(() => {
+    return nodes.map((node) => {
+      const stepStatus = executionState.stepStatuses[node.id];
+      let borderClass = '';
+      if (stepStatus === 'RUNNING') borderClass = 'ring-4 ring-amber-400/80 shadow-[0_0_20px_rgba(245,158,11,0.5)] animate-pulse';
+      if (stepStatus === 'COMPLETE') borderClass = 'ring-4 ring-emerald-400/80 shadow-[0_0_20px_rgba(16,185,129,0.5)]';
+      if (stepStatus === 'FAILED') borderClass = 'ring-4 ring-red-500/80 shadow-[0_0_20px_rgba(239,68,68,0.5)]';
+
+      return {
+        ...node,
+        className: `${node.className || ''} ${borderClass}`,
+      };
+    });
+  }, [nodes, executionState.stepStatuses]);
+
+  // Enriched styled edges with custom percentage labels
+  const styledEdges = useMemo(() => {
+    return edges.map((edge) => {
+      const targetNode = nodes.find((n) => n.id === edge.target);
+      const percentage = targetNode?.data?.percentage;
+      return {
+        ...edge,
+        type: 'custom',
+        animated: true,
+        data: { percentage },
+      };
+    });
+  }, [edges, nodes]);
+
+  const handleBackClick = () => {
+    if (isDirty) {
+      if (confirm('You have unsaved canvas changes. Are you sure you want to leave?')) {
+        router.push('/workflows');
+      }
+    } else {
+      router.push('/workflows');
     }
   };
 
@@ -208,22 +572,29 @@ export default function WorkflowCanvas({
       {/* Canvas Top Bar */}
       <div className="flex h-14 items-center justify-between border-b border-slate-800 bg-slate-950/90 px-4 sm:px-6">
         <div className="flex items-center gap-3">
-          <Link
-            href="/workflows"
+          <button
+            onClick={handleBackClick}
             className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-800 bg-slate-900 text-slate-400 hover:text-white transition-colors"
+            title="Back to workflows"
           >
             <ArrowLeft className="h-4 w-4" />
-          </Link>
+          </button>
 
           <input
             type="text"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => {
+              setName(e.target.value);
+              setIsDirty(true);
+            }}
             className="bg-transparent font-bold text-white text-base focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded px-2 py-1"
           />
 
           <button
-            onClick={() => setIsActive(!isActive)}
+            onClick={() => {
+              setIsActive(!isActive);
+              setIsDirty(true);
+            }}
             className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold transition-all ${
               isActive
                 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
@@ -233,58 +604,119 @@ export default function WorkflowCanvas({
             <span className={`h-1.5 w-1.5 rounded-full ${isActive ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
             {isActive ? 'Active' : 'Paused'}
           </button>
+
+          {/* Allocation Gauge Badge */}
+          <div
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold border transition-colors ${
+              totalAllocation > 100
+                ? 'bg-red-500/20 text-red-300 border-red-500/40 shadow-red-500/20 animate-pulse'
+                : totalAllocation === 100
+                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
+            }`}
+          >
+            {totalAllocation > 100 && <AlertTriangle className="h-3.5 w-3.5 text-red-400 shrink-0" />}
+            <span>Total Allocation: {totalAllocation}% / 100%</span>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Undo / Redo Toolbar */}
+          <div className="flex items-center rounded-xl border border-slate-800 bg-slate-900 p-0.5">
+            <button
+              onClick={handleUndo}
+              disabled={historyIndexRef.current <= 0}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:text-white transition-colors disabled:opacity-30"
+              title="Undo (Ctrl+Z)"
+            >
+              <Undo2 className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={handleRedo}
+              disabled={historyIndexRef.current >= historyRef.current.length - 1}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:text-white transition-colors disabled:opacity-30"
+              title="Redo (Ctrl+Y)"
+            >
+              <Redo2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          {/* Auto Arrange Layout Button */}
           <button
-            onClick={handleManualTestTrigger}
-            className="flex items-center gap-2 rounded-xl border border-indigo-500/30 bg-indigo-600/10 px-3.5 py-1.5 text-xs font-semibold text-indigo-300 hover:bg-indigo-600/20 transition-colors"
+            onClick={handleAutoArrange}
+            className="hidden md:flex items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-colors"
+            title="Auto organize canvas nodes into clean columns"
           >
-            <Play className="h-3.5 w-3.5 fill-indigo-400 text-indigo-400" />
-            Trigger Test Flow
+            <LayoutGrid className="h-3.5 w-3.5 text-indigo-400" />
+            <span>Auto Arrange</span>
           </button>
 
+          {/* Trigger Test Flow Button */}
+          <button
+            onClick={handleManualTestTrigger}
+            disabled={executionState.running}
+            className="flex items-center gap-2 rounded-xl border border-indigo-500/30 bg-indigo-600/10 px-3.5 py-1.5 text-xs font-semibold text-indigo-300 hover:bg-indigo-600/20 transition-colors disabled:opacity-50"
+          >
+            <Play className={`h-3.5 w-3.5 fill-indigo-400 text-indigo-400 ${executionState.running ? 'animate-spin' : ''}`} />
+            <span>{executionState.running ? 'Executing...' : 'Trigger Test Flow'}</span>
+          </button>
+
+          {/* Save Button */}
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-1.5 text-xs font-semibold text-white shadow-md hover:bg-indigo-500 transition-colors"
+            className={`flex items-center gap-2 rounded-xl px-4 py-1.5 text-xs font-semibold text-white shadow-md transition-colors ${
+              isDirty ? 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 shadow-indigo-600/20' : 'bg-indigo-600 hover:bg-indigo-500'
+            }`}
           >
             <Save className="h-3.5 w-3.5" />
-            {saving ? 'Saving...' : 'Save Flow'}
+            <span>{saving ? 'Saving...' : isDirty ? 'Save Changes' : 'Save Flow'}</span>
           </button>
-
-          {saveStatus === 'success' && (
-            <span className="flex items-center gap-1 text-xs text-emerald-400">
-              <CheckCircle2 className="h-4 w-4" /> Saved!
-            </span>
-          )}
-          {saveStatus === 'error' && (
-            <span className="flex items-center gap-1 text-xs text-red-400">
-              <AlertTriangle className="h-4 w-4" /> Save failed
-            </span>
-          )}
         </div>
       </div>
 
       {/* Main Canvas Workspace */}
       <div className="flex flex-1 overflow-hidden relative">
-        <NodePalette onAddNode={handleAddNode} />
+        <NodePalette onAddNode={(type) => handleAddNodeAtPosition(type)} />
 
-        <div className="flex-1 h-full w-full bg-slate-950">
+        <div className="flex-1 h-full w-full bg-slate-950 relative" onDragOver={onDragOver} onDrop={onDrop}>
           <ReactFlow
-            nodes={nodes}
-            edges={edges}
+            nodes={styledNodes}
+            edges={styledEdges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            isValidConnection={isValidConnection}
             onNodeClick={onNodeClick}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
+            deleteKeyCode={['Delete', 'Backspace']}
             fitView
             className="bg-slate-950"
           >
             <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#334155" />
             <Controls className="bg-slate-900 border-slate-800 text-white shadow-xl" />
+            <MiniMap
+              nodeColor={(n) => {
+                if (n.type === 'trigger') return '#10B981';
+                if (n.type === 'swap') return '#A855F7';
+                if (n.type === 'bridge') return '#3B82F6';
+                if (n.type === 'send') return '#F59E0B';
+                return '#64748B';
+              }}
+              maskColor="rgba(2, 6, 23, 0.7)"
+              className="!bg-slate-900 !border-slate-800 rounded-xl overflow-hidden shadow-2xl"
+            />
           </ReactFlow>
+
+          {/* Floating Canvas Controls Help Footer */}
+          <div className="absolute bottom-4 left-4 z-10 hidden lg:flex items-center gap-3 rounded-full border border-slate-800 bg-slate-900/80 px-4 py-1.5 text-[11px] font-medium text-slate-400 backdrop-blur-md shadow-lg pointer-events-none">
+            <span className="flex items-center gap-1"><Sparkles className="h-3 w-3 text-indigo-400" /> Drag & Drop from palette</span>
+            <span>•</span>
+            <span>Ctrl+Z Undo</span>
+            <span>•</span>
+            <span>Del to delete selected</span>
+          </div>
         </div>
 
         <ConfigPanel
@@ -294,5 +726,15 @@ export default function WorkflowCanvas({
         />
       </div>
     </div>
+  );
+}
+
+export default function WorkflowCanvas(props: WorkflowCanvasProps) {
+  return (
+    <ToastProvider>
+      <ReactFlowProvider>
+        <InnerWorkflowCanvas {...props} />
+      </ReactFlowProvider>
+    </ToastProvider>
   );
 }
