@@ -81,9 +81,9 @@ export default function LoginPage() {
 
       <div className="w-full max-w-md space-y-8 rounded-2xl border border-slate-800 bg-slate-900/80 p-8 shadow-2xl backdrop-blur-xl relative z-10">
         <div className="text-center space-y-3">
-          <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 via-blue-600 to-teal-500 p-0.5 shadow-lg shadow-indigo-500/20 mb-2">
-            <div className="flex h-full w-full items-center justify-center rounded-[14px] bg-slate-950">
-              <Zap className="h-7 w-7 text-indigo-400" />
+          <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 via-purple-600 to-teal-500 p-0.5 shadow-lg shadow-indigo-500/20 mb-2">
+            <div className="flex h-full w-full items-center justify-center rounded-[14px] bg-slate-950 p-2">
+              <img src="/icon.svg" alt="Delta Logo" className="h-full w-full object-contain" />
             </div>
           </div>
           <h1 className="text-3xl font-bold tracking-tight text-white font-sans">delta</h1>

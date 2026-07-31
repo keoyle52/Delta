@@ -29,6 +29,7 @@ model Wallet {
   blockchain           String   @default("ARC-TESTNET")
   isSimulated          Boolean  @default(false)
   simulatedUsdcBalance String   @default("0")
+  simulatedEurcBalance String   @default("0")
   createdAt            DateTime @default(now())
 }
 

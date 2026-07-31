@@ -1,32 +1,30 @@
-<svg width="640" height="220" viewBox="0 0 640 220" xmlns="http://www.w3.org/2000/svg" role="img">
-<title>Delta — Built on Arc</title>
-<desc>Logo showing a single trunk line splitting into three colored branches, next to the wordmark "delta" and a small "Built on Arc" badge.</desc>
-<style>
-  .word { fill:#0F172A; font-family: Arial, Helvetica, sans-serif; font-weight:700; }
-  .badge-text { fill:#475569; font-family: Arial, Helvetica, sans-serif; font-weight:600; }
-  .badge-bg { fill:none; stroke:#CBD5E1; }
-  @media (prefers-color-scheme: dark) {
-    .word { fill:#F8FAFC; }
-    .badge-text { fill:#94A3B8; }
-    .badge-bg { stroke:#334155; }
-  }
-</style>
+<svg width="640" height="220" viewBox="0 0 640 220" fill="none" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>Delta — Built on Arc</title>
+  <desc>Minimal geometric delta logo symbol with automated money-flow branching nodes, next to wordmark delta and Built on Arc badge.</desc>
+  <defs>
+    <linearGradient id="deltaWideGrad" x1="20" y1="190" x2="180" y2="30" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4F46E5"/>
+      <stop offset="50%" stop-color="#7C3AED"/>
+      <stop offset="100%" stop-color="#14B8A6"/>
+    </linearGradient>
+  </defs>
 
-<!-- icon: single flow splitting into three -->
-<g stroke-linecap="round" fill="none">
-  <line x1="120" y1="195" x2="120" y2="128" stroke="#8B5CF6" stroke-width="13"/>
-  <path d="M120,128 L64,52" stroke="#8B5CF6" stroke-width="9"/>
-  <path d="M120,128 L120,42" stroke="#3B82F6" stroke-width="9"/>
-  <path d="M120,128 L176,52" stroke="#14B8A6" stroke-width="9"/>
-</g>
-<circle cx="64" cy="46" r="11" fill="#8B5CF6"/>
-<circle cx="120" cy="36" r="11" fill="#3B82F6"/>
-<circle cx="176" cy="46" r="11" fill="#14B8A6"/>
+  <!-- Delta Icon Mark -->
+  <g transform="translate(10, 10)">
+    <path d="M90 20L160 145C163.2 150.6 159.2 157.8 152.8 157.8H27.2C20.8 157.8 16.8 150.6 20 145L90 20Z" 
+          stroke="url(#deltaWideGrad)" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <path d="M90 157.8V100M90 100L60 70M90 100L120 70" 
+          stroke="url(#deltaWideGrad)" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="90" cy="48" r="10" fill="#14B8A6"/>
+    <circle cx="54" cy="60" r="9" fill="#8B5CF6"/>
+    <circle cx="126" cy="60" r="9" fill="#3B82F6"/>
+  </g>
 
-<!-- wordmark -->
-<text x="220" y="130" font-size="58" class="word">delta</text>
+  <!-- Wordmark -->
+  <text x="210" y="125" fill="#F8FAFC" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="64" font-weight="800" letter-spacing="-0.03em">delta</text>
 
-<!-- built on arc badge -->
-<rect x="222" y="150" width="150" height="30" rx="15" class="badge-bg" stroke-width="1.2"/>
-<text x="247" y="170" font-size="13" class="badge-text">Built on Arc</text>
+  <!-- Built on Arc Badge -->
+  <rect x="212" y="148" width="145" height="28" rx="14" fill="#0F172A" stroke="#334155" stroke-width="1.2"/>
+  <circle cx="228" cy="162" r="4" fill="#A855F7"/>
+  <text x="238" y="167" fill="#94A3B8" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="700">Built on Arc</text>
 </svg>

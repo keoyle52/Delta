@@ -20,14 +20,15 @@ export async function GET(req: NextRequest) {
 
     if (isSimulated) {
       const simUsdc = wallet?.simulatedUsdcBalance || '0';
+      const simEurc = wallet?.simulatedEurcBalance || '0';
       return NextResponse.json({
         walletId: wallet?.circleWalletId || 'sim-wallet',
         address: wallet?.address || '0x0000000000000000000000000000000000000000',
         blockchain: 'ARC-TESTNET (SIMULATED)',
         usdc: simUsdc,
         formattedUsdc: parseFloat(simUsdc).toFixed(2),
-        eurc: '0.00',
-        formattedEurc: '0.00',
+        eurc: simEurc,
+        formattedEurc: parseFloat(simEurc).toFixed(2),
         nativeGasUsdc: simUsdc,
         isSimulated: true,
       });

@@ -17,8 +17,8 @@ export default function Header() {
         {/* Brand Logo & Wordmark + Built on Arc Badge */}
         <div className="flex items-center gap-4">
           <Link href="/dashboard" className="flex items-center gap-3.5 group">
-            <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 border border-slate-700/80 p-2 shadow-xl shadow-indigo-500/10 group-hover:scale-105 transition-transform">
-              <Image src="/logo.svg" alt="Delta Logo" width={40} height={40} className="h-full w-full object-contain" priority />
+            <div className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 border border-slate-700/80 p-1.5 shadow-xl shadow-indigo-500/10 group-hover:scale-105 transition-transform">
+              <Image src="/icon.svg" alt="Delta Logo" width={32} height={32} className="h-8 w-8 object-contain" priority />
             </div>
             <span className="text-2xl font-extrabold tracking-tight text-white font-sans">
               delta

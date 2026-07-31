@@ -155,7 +155,7 @@ export const executeWorkflowFunction = inngest.createFunction(
           const fakeTxHash = `0xsim-${randomUUID().slice(0, 16)}`;
           const actionAmountNum = parseFloat(actionAmount);
 
-          // Deduct allocated amount from DB simulated balance
+          // Perform node-type-aware balance update in DB
           const simWallet = await prisma.wallet.findFirst({
             where: {
               OR: [
@@ -165,24 +165,42 @@ export const executeWorkflowFunction = inngest.createFunction(
             },
           });
 
-          if (simWallet) {
-            const currentBal = parseFloat(simWallet.simulatedUsdcBalance || '0');
-            const updatedBal = Math.max(0, currentBal - actionAmountNum).toFixed(6);
-            await prisma.wallet.update({
-              where: { id: simWallet.id },
-              data: { simulatedUsdcBalance: updatedBal },
-            });
-          }
-
           let detailMsg = `[SIMULATED] Successfully completed ${nodeType.toUpperCase()} of ${actionAmount} USDC`;
-          if (nodeType === 'swap') {
-            detailMsg = `[SIMULATED] Swapped ${actionAmount} USDC to ${nodeData.tokenOut || 'EURC'} (Tx: ${fakeTxHash})`;
-          } else if (nodeType === 'bridge') {
-            detailMsg = `[SIMULATED] Bridged ${actionAmount} USDC to ${nodeData.destinationChain || 'Solana_Devnet'} recipient ${nodeData.destinationAddress || '0x...'} (Tx: ${fakeTxHash})`;
-          } else if (nodeType === 'send') {
-            detailMsg = `[SIMULATED] Sent ${actionAmount} USDC to recipient ${nodeData.destinationAddress || '0x...'} (Tx: ${fakeTxHash})`;
-          } else if (nodeType === 'notify') {
-            detailMsg = `[SIMULATED] Sent webhook alert for ${actionAmount} USDC`;
+
+          if (simWallet) {
+            const currentUsdc = parseFloat(simWallet.simulatedUsdcBalance || '0');
+            const currentEurc = parseFloat(simWallet.simulatedEurcBalance || '0');
+            const updatedUsdc = Math.max(0, currentUsdc - actionAmountNum).toFixed(6);
+
+            if (nodeType === 'swap') {
+              const SIMULATED_USDC_TO_EURC_RATE = 0.92;
+              const addedEurc = actionAmountNum * SIMULATED_USDC_TO_EURC_RATE;
+              const updatedEurc = (currentEurc + addedEurc).toFixed(6);
+
+              await prisma.wallet.update({
+                where: { id: simWallet.id },
+                data: {
+                  simulatedUsdcBalance: updatedUsdc,
+                  simulatedEurcBalance: updatedEurc,
+                },
+              });
+              detailMsg = `[SIMULATED] Swapped ${actionAmount} USDC to ${addedEurc.toFixed(2)} EURC (Tx: ${fakeTxHash})`;
+            } else {
+              await prisma.wallet.update({
+                where: { id: simWallet.id },
+                data: {
+                  simulatedUsdcBalance: updatedUsdc,
+                },
+              });
+
+              if (nodeType === 'bridge') {
+                detailMsg = `[SIMULATED] Bridged ${actionAmount} USDC to ${nodeData.destinationChain || 'Solana_Devnet'} recipient ${nodeData.destinationAddress || '0x...'} (Tx: ${fakeTxHash})`;
+              } else if (nodeType === 'send') {
+                detailMsg = `[SIMULATED] Sent ${actionAmount} USDC to recipient ${nodeData.destinationAddress || '0x...'} (Tx: ${fakeTxHash})`;
+              } else if (nodeType === 'notify') {
+                detailMsg = `[SIMULATED] Sent webhook alert for ${actionAmount} USDC`;
+              }
+            }
           }
 
           await updateLog({

@@ -1,0 +1,22 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="deltaIconGrad" x1="10" y1="54" x2="54" y2="10" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4F46E5"/>
+      <stop offset="50%" stop-color="#7C3AED"/>
+      <stop offset="100%" stop-color="#14B8A6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Outer Geometric Delta Triangle -->
+  <path d="M32 10L52 46C53.2 48.1 51.7 50.8 49.2 50.8H14.8C12.3 50.8 10.8 48.1 12 46L32 10Z" 
+        stroke="url(#deltaIconGrad)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+
+  <!-- Inner Money-Flow Branching Paths -->
+  <path d="M32 50.8V35M32 35L22 24M32 35L42 24" 
+        stroke="url(#deltaIconGrad)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Node Dots -->
+  <circle cx="32" cy="18" r="3.5" fill="#14B8A6"/>
+  <circle cx="20" cy="22" r="3" fill="#8B5CF6"/>
+  <circle cx="44" cy="22" r="3" fill="#3B82F6"/>
+</svg>
