@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { usePrivy } from '@privy-io/react-auth';
-import { Zap, Mail, ArrowRight, RefreshCw, CheckCircle2, ShieldCheck, Sparkles, Lock } from 'lucide-react';
+import { Zap, ArrowRight, RefreshCw, ShieldCheck, Lock, PlayCircle } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -24,7 +24,6 @@ export default function LoginPage() {
           const res = await signIn('credentials', {
             email,
             privyToken: token || undefined,
-            code: '123456',
             redirect: false,
           });
 
@@ -46,14 +45,13 @@ export default function LoginPage() {
     syncPrivySession();
   }, [ready, authenticated, privyUser, getAccessToken, router]);
 
-  const handleInstantDemoLogin = async () => {
+  const handleSimulatedLogin = async () => {
     setLoggingIn(true);
     setError('');
 
     try {
       const res = await signIn('credentials', {
-        email: 'demo@delta.build',
-        code: '123456',
+        mode: 'simulate',
         redirect: false,
       });
 
@@ -64,7 +62,7 @@ export default function LoginPage() {
         router.refresh();
       }
     } catch (err: any) {
-      setError(err.message || 'Demo login failed.');
+      setError(err.message || 'Failed to start simulation session.');
     } finally {
       setLoggingIn(false);
     }
@@ -98,47 +96,6 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* 1-CLICK INSTANT DEMO LOGIN BUTTON */}
-        <div className="rounded-xl border border-indigo-500/30 bg-indigo-950/30 p-4 space-y-3">
-          <div className="flex items-center justify-between text-xs font-bold text-indigo-300">
-            <span className="flex items-center gap-1.5 uppercase tracking-wider">
-              <Sparkles className="h-4 w-4 text-indigo-400" />
-              Demo Jury Quick Access
-            </span>
-            <span className="text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded-full">
-              Instant
-            </span>
-          </div>
-          <p className="text-xs text-slate-400">
-            Bypass email verification and sign in instantly as shared demo user (<code className="text-indigo-300 font-mono">demo@delta.build</code>).
-          </p>
-          <button
-            type="button"
-            onClick={handleInstantDemoLogin}
-            disabled={loggingIn}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 py-3 text-xs font-bold text-white shadow-lg shadow-indigo-600/20 hover:from-indigo-500 hover:to-purple-500 transition-all disabled:opacity-50"
-          >
-            {loggingIn ? (
-              <>
-                <RefreshCw className="h-4 w-4 animate-spin" />
-                Accessing Demo Studio...
-              </>
-            ) : (
-              <>
-                <Zap className="h-4 w-4" />
-                <span>Enter Demo Studio (1-Click Auto-Login)</span>
-              </>
-            )}
-          </button>
-        </div>
-
-        <div className="relative flex items-center justify-center">
-          <div className="w-full border-t border-slate-800" />
-          <span className="bg-slate-900 px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-            or privy passwordless auth
-          </span>
-        </div>
-
         {error && (
           <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs font-semibold text-red-400 text-center">
             {error}
@@ -150,7 +107,7 @@ export default function LoginPage() {
             type="button"
             onClick={handlePrivyLogin}
             disabled={!ready || loggingIn}
-            className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-slate-700 bg-slate-900 hover:bg-slate-800 py-3 text-xs font-bold text-slate-100 shadow-md transition-all disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-slate-700 bg-slate-900 hover:bg-slate-800 py-3.5 text-xs font-bold text-slate-100 shadow-md transition-all disabled:opacity-50"
           >
             {!ready || loggingIn ? (
               <>
@@ -170,6 +127,18 @@ export default function LoginPage() {
             <Lock className="h-3 w-3" />
             <span>Privy Auth handles OTP verification. Arc wallet provisioning via Circle DCW.</span>
           </p>
+
+          <div className="pt-4 border-t border-slate-800/80 text-center">
+            <button
+              type="button"
+              onClick={handleSimulatedLogin}
+              disabled={loggingIn}
+              className="text-xs text-slate-400 hover:text-indigo-400 transition-colors font-medium underline underline-offset-4 inline-flex items-center gap-1.5"
+            >
+              <PlayCircle className="h-3.5 w-3.5 text-amber-400" />
+              <span>Try without connecting wallet → Simulation Mode (with fake 20 USDC)</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

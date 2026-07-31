@@ -30,6 +30,14 @@ export default function Header() {
             <span className="h-2 w-2 rounded-full bg-purple-400 animate-pulse" />
             Built on Arc
           </div>
+
+          {/* SIMULATION MODE BADGE */}
+          {Boolean((session?.user as any)?.isSimulated) && (
+            <div className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-950/50 px-3 py-1 text-xs font-extrabold text-amber-300 shadow-inner">
+              <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+              SIMULATION MODE — Fake Balances
+            </div>
+          )}
         </div>
 
         {/* Navigation links */}

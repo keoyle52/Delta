@@ -83,7 +83,13 @@ export const executeWorkflowFunction = inngest.createFunction(
 
         const updateLog = async (rawLogEntry: any) => {
           const logEntry = JSON.parse(
-            JSON.stringify(rawLogEntry, (key, value) => (typeof value === 'bigint' ? value.toString() : value))
+            JSON.stringify(
+              {
+                ...rawLogEntry,
+                ...(event.data?.isSimulated ? { simulated: true } : {}),
+              },
+              (key, value) => (typeof value === 'bigint' ? value.toString() : value)
+            )
           );
           const freshExec = await prisma.execution.findUnique({
             where: { id: execution.id },
@@ -129,6 +135,67 @@ export const executeWorkflowFunction = inngest.createFunction(
 
         const nodeType = node.type;
         const nodeData = node.data || {};
+
+        // SIMULATION MODE EXECUTION BRANCH (No Circle / Arc RPC calls)
+        if (event.data?.isSimulated) {
+          const { randomUUID } = await import('crypto');
+
+          await updateLog({
+            stepId: node.id,
+            nodeType,
+            nodeName: nodeData.label || nodeType.toUpperCase(),
+            status: 'RUNNING',
+            simulated: true,
+            details: `[SIMULATED] Executing ${nodeType.toUpperCase()} action...`,
+          });
+
+          // Simulate processing latency (300ms - 800ms)
+          await new Promise((r) => setTimeout(r, Math.floor(Math.random() * 500) + 300));
+
+          const fakeTxHash = `0xsim-${randomUUID().slice(0, 16)}`;
+          const actionAmountNum = parseFloat(actionAmount);
+
+          // Deduct allocated amount from DB simulated balance
+          const simWallet = await prisma.wallet.findFirst({
+            where: {
+              OR: [
+                ...(walletAddress ? [{ address: { equals: walletAddress, mode: 'insensitive' as const } }] : []),
+                ...(walletId ? [{ circleWalletId: { equals: walletId } }] : []),
+              ],
+            },
+          });
+
+          if (simWallet) {
+            const currentBal = parseFloat(simWallet.simulatedUsdcBalance || '0');
+            const updatedBal = Math.max(0, currentBal - actionAmountNum).toFixed(6);
+            await prisma.wallet.update({
+              where: { id: simWallet.id },
+              data: { simulatedUsdcBalance: updatedBal },
+            });
+          }
+
+          let detailMsg = `[SIMULATED] Successfully completed ${nodeType.toUpperCase()} of ${actionAmount} USDC`;
+          if (nodeType === 'swap') {
+            detailMsg = `[SIMULATED] Swapped ${actionAmount} USDC to ${nodeData.tokenOut || 'EURC'} (Tx: ${fakeTxHash})`;
+          } else if (nodeType === 'bridge') {
+            detailMsg = `[SIMULATED] Bridged ${actionAmount} USDC to ${nodeData.destinationChain || 'Solana_Devnet'} recipient ${nodeData.destinationAddress || '0x...'} (Tx: ${fakeTxHash})`;
+          } else if (nodeType === 'send') {
+            detailMsg = `[SIMULATED] Sent ${actionAmount} USDC to recipient ${nodeData.destinationAddress || '0x...'} (Tx: ${fakeTxHash})`;
+          } else if (nodeType === 'notify') {
+            detailMsg = `[SIMULATED] Sent webhook alert for ${actionAmount} USDC`;
+          }
+
+          await updateLog({
+            stepId: node.id,
+            nodeType,
+            nodeName: nodeData.label || nodeType.toUpperCase(),
+            status: 'COMPLETE',
+            txHash: fakeTxHash,
+            simulated: true,
+            details: detailMsg,
+          });
+          return;
+        }
 
         try {
           // Check if this step already executed an on-chain transaction on a prior Inngest attempt

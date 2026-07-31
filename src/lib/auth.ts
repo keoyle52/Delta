@@ -1,7 +1,46 @@
 import { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
+import { randomUUID, randomBytes } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { createArcUserWallet } from '@/lib/circle/wallets';
+
+/**
+ * Creates an isolated simulation demo session for a new visitor.
+ * Generates a unique user record and a fake EVM address without calling Circle API or Arc RPC.
+ */
+export async function createSimulatedDemoSession() {
+  const simId = randomUUID().slice(0, 8);
+  const email = `sim-${simId}@delta.demo`;
+  const fakeAddress = `0x${randomBytes(20).toString('hex')}`;
+  const fakeCircleWalletId = `sim-${randomUUID()}`;
+
+  const user = await prisma.user.create({
+    data: {
+      email,
+      isSimulated: true,
+      wallet: {
+        create: {
+          circleWalletId: fakeCircleWalletId,
+          circleWalletSetId: 'sim-set-01',
+          address: fakeAddress,
+          blockchain: 'ARC-TESTNET (SIMULATED)',
+          isSimulated: true,
+          simulatedUsdcBalance: '0',
+        },
+      },
+    },
+    include: {
+      wallet: true,
+    },
+  });
+
+  return {
+    id: user.id,
+    email: user.email,
+    walletAddress: user.wallet?.address || fakeAddress,
+    isSimulated: true,
+  };
+}
 
 /**
  * Idempotently fetches existing user wallet or provisions a single new custodial wallet on Arc Testnet
@@ -50,21 +89,26 @@ export async function getOrCreateUserWallet(userId: string) {
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
-      name: 'Privy Email OTP & Demo Login',
+      name: 'Privy Email OTP & Simulation Mode',
       credentials: {
         email: { label: 'Email', type: 'email' },
         code: { label: 'Verification Code', type: 'text' },
         privyToken: { label: 'Privy Access Token', type: 'text' },
+        mode: { label: 'Auth Mode', type: 'text' },
       },
       async authorize(credentials) {
+        // 1. Isolated Simulation Mode Session Handler
+        if (credentials?.mode === 'simulate') {
+          return await createSimulatedDemoSession();
+        }
+
         if (!credentials?.email || !credentials.email.trim()) {
           throw new Error('Email address is required for authentication.');
         }
         let email = credentials.email.toLowerCase().trim();
-        const inputCode = (credentials?.code || '').trim();
         const privyToken = credentials?.privyToken;
 
-        // 1. Verify Privy token if provided via Privy client SDK
+        // 2. Verify Privy token if provided via Privy client SDK
         const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
         const appSecret = process.env.PRIVY_APP_SECRET;
 
@@ -86,25 +130,11 @@ export const authOptions: NextAuthOptions = {
           }
         }
 
-        // Strictly restrict 1-Click Jury Demo access to demo accounts ONLY with secure environment controls
-        const isDemoAccount = email === 'demo@delta.build' || email === 'demo-test-user@delta.app';
-        const isDemoEnabled = process.env.NODE_ENV !== 'production' || process.env.ENABLE_DEMO_LOGIN === 'true';
-        const demoSecret = process.env.DEMO_LOGIN_SECRET || (process.env.NODE_ENV !== 'production' ? 'demo' : undefined);
-
-        const isDemoBypass = isDemoEnabled && isDemoAccount && !!demoSecret && inputCode === demoSecret;
-
-        if (isDemoAccount && !isDemoBypass && !isVerifiedPrivyUser) {
-          // Add brute-force mitigation delay on failed demo attempts
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-        }
-
-        const isValidAccess = isVerifiedPrivyUser || isDemoBypass;
-
-        if (!isValidAccess) {
+        if (!isVerifiedPrivyUser) {
           throw new Error('Invalid or unverified login session. Privy token verification required.');
         }
 
-        // 2. Find existing user OR auto-register new user in Prisma
+        // 3. Find existing user OR auto-register new user in Prisma
         let user = await prisma.user.findUnique({
           where: { email },
         });
@@ -115,7 +145,7 @@ export const authOptions: NextAuthOptions = {
           });
         }
 
-        // 3. Provision / link Circle custodial wallet on Arc Testnet idempotently
+        // 4. Provision / link Circle custodial wallet on Arc Testnet idempotently
         let userWallet: any = null;
         try {
           userWallet = await getOrCreateUserWallet(user.id);
@@ -123,26 +153,11 @@ export const authOptions: NextAuthOptions = {
           console.warn('Wallet provisioning warning during login:', walletErr.message);
         }
 
-        // 4. Demo Wallet High-Balance Guard
-        if (isDemoAccount && userWallet?.address) {
-          try {
-            const { getWalletBalances } = await import('@/lib/arc/rpc');
-            const balances = await getWalletBalances(userWallet.address);
-            const usdcBal = parseFloat(balances.usdc || '0');
-            if (usdcBal > 5.0) {
-              console.warn(
-                `[DEMO WALLET GUARD] High balance warning: Demo wallet ${email} (${userWallet.address}) holds ${usdcBal.toFixed(2)} USDC (> 5.0 USDC threshold).`
-              );
-            }
-          } catch (balErr: any) {
-            console.warn('[DEMO WALLET GUARD] Failed to check demo wallet balance:', balErr.message);
-          }
-        }
-
         return {
           id: user.id,
           email: user.email,
           walletAddress: userWallet?.address || null,
+          isSimulated: false,
         };
       },
     }),
@@ -155,6 +170,7 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id;
         token.walletAddress = (user as any).walletAddress;
+        token.isSimulated = (user as any).isSimulated || false;
       }
       return token;
     },
@@ -164,6 +180,7 @@ export const authOptions: NextAuthOptions = {
           ...session.user,
           id: token.id as string,
           walletAddress: token.walletAddress as string | null,
+          isSimulated: Boolean(token.isSimulated),
         } as any;
       }
       return session;

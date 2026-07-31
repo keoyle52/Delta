@@ -8,25 +8,28 @@ datasource db {
 }
 
 model User {
-  id         String     @id @default(cuid())
-  email      String     @unique
-  password   String?
-  otpCode    String?
-  otpExpires DateTime?
-  createdAt  DateTime   @default(now())
-  wallet     Wallet?
-  workflows  Workflow[]
+  id           String     @id @default(cuid())
+  email        String     @unique
+  password     String?
+  otpCode      String?
+  otpExpires   DateTime?
+  isSimulated  Boolean    @default(false)
+  createdAt    DateTime   @default(now())
+  wallet       Wallet?
+  workflows    Workflow[]
 }
 
 model Wallet {
-  id                String   @id @default(cuid())
-  userId            String   @unique
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  circleWalletId    String   @unique
-  circleWalletSetId String
-  address           String   @unique
-  blockchain        String   @default("ARC-TESTNET")
-  createdAt         DateTime @default(now())
+  id                   String   @id @default(cuid())
+  userId               String   @unique
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  circleWalletId       String   @unique
+  circleWalletSetId    String
+  address              String   @unique
+  blockchain           String   @default("ARC-TESTNET")
+  isSimulated          Boolean  @default(false)
+  simulatedUsdcBalance String   @default("0")
+  createdAt            DateTime @default(now())
 }
 
 model Workflow {

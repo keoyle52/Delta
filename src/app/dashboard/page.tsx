@@ -37,6 +37,26 @@ export default function DashboardPage() {
   const [withdrawToken, setWithdrawToken] = useState<'USDC' | 'EURC'>('USDC');
   const [withdrawing, setWithdrawing] = useState(false);
   const [withdrawResult, setWithdrawResult] = useState<any>(null);
+  const [simulatingDeposit, setSimulatingDeposit] = useState(false);
+
+  const handleSimulateDeposit = async () => {
+    try {
+      setSimulatingDeposit(true);
+      const res = await fetch('/api/wallet/simulate-deposit', {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        fetchWalletAndBalances();
+      } else {
+        alert(data.error || 'Failed to simulate deposit');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Deposit simulation failed');
+    } finally {
+      setSimulatingDeposit(false);
+    }
+  };
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -178,6 +198,17 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          {Boolean((session?.user as any)?.isSimulated) && (
+            <button
+              onClick={handleSimulateDeposit}
+              disabled={simulatingDeposit}
+              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-2.5 text-xs font-extrabold text-slate-950 shadow-lg shadow-amber-500/20 hover:from-amber-400 hover:to-orange-400 transition-all disabled:opacity-50"
+            >
+              <Zap className={`h-4 w-4 fill-slate-950 ${simulatingDeposit ? 'animate-spin' : ''}`} />
+              <span>Simulate 20 USDC Deposit</span>
+            </button>
+          )}
+
           <button
             onClick={() => {
               setWithdrawResult(null);
@@ -207,6 +238,25 @@ export default function DashboardPage() {
           </button>
         </div>
       </div>
+
+      {/* SIMULATION MODE NOTIFICATION BANNER */}
+      {Boolean((session?.user as any)?.isSimulated) && (
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-950/20 p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-amber-200">
+          <div className="flex items-center gap-2.5 text-xs font-medium">
+            <Zap className="h-4 w-4 text-amber-400 shrink-0" />
+            <span>
+              <strong>Simulation Mode Active:</strong> Operating with isolated test balances. No real custodial wallets or Arc platform funds are used.
+            </span>
+          </div>
+          <button
+            onClick={handleSimulateDeposit}
+            disabled={simulatingDeposit}
+            className="shrink-0 rounded-xl bg-amber-500 px-3.5 py-1.5 text-xs font-bold text-slate-950 hover:bg-amber-400 transition-colors disabled:opacity-50"
+          >
+            + Add Fake 20 USDC
+          </button>
+        </div>
+      )}
 
       {/* Wallet Info & Arc Balances Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

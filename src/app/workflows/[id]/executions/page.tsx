@@ -261,6 +261,11 @@ export default function ExecutionsPage({ params }: { params: Promise<{ id: strin
                             >
                               {step.status}
                             </span>
+                            {Boolean(step.simulated) && (
+                              <span className="rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 text-[10px] font-extrabold tracking-wider uppercase">
+                                SIMULATED
+                              </span>
+                            )}
                           </div>
 
                           {explorerUrl && (

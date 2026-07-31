@@ -12,9 +12,26 @@ export async function GET(req: NextRequest) {
     }
 
     const userId = (session.user as any).id;
+    const isSimulated = Boolean((session.user as any).isSimulated);
+
     let wallet = await prisma.wallet.findUnique({
       where: { userId },
     });
+
+    if (isSimulated) {
+      const simUsdc = wallet?.simulatedUsdcBalance || '0';
+      return NextResponse.json({
+        walletId: wallet?.circleWalletId || 'sim-wallet',
+        address: wallet?.address || '0x0000000000000000000000000000000000000000',
+        blockchain: 'ARC-TESTNET (SIMULATED)',
+        usdc: simUsdc,
+        formattedUsdc: parseFloat(simUsdc).toFixed(2),
+        eurc: '0.00',
+        formattedEurc: '0.00',
+        nativeGasUsdc: simUsdc,
+        isSimulated: true,
+      });
+    }
 
     // Auto-provision custodial wallet on demand if not present in DB
     if (!wallet) {
@@ -40,6 +57,7 @@ export async function GET(req: NextRequest) {
       address: wallet.address,
       blockchain: wallet.blockchain,
       ...balances,
+      isSimulated: false,
     });
   } catch (error: any) {
     console.error('Wallet balance API error:', error);

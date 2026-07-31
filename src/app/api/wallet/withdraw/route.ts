@@ -17,6 +17,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    if (Boolean((session.user as any).isSimulated)) {
+      return NextResponse.json(
+        { error: 'Withdrawals are disabled in Simulation Mode (these are simulated funds).' },
+        { status: 403 }
+      );
+    }
+
     const userId = (session.user as any).id;
     const body = await req.json().catch(() => ({}));
     const { destinationAddress, amount, token = 'USDC' } = body;
