@@ -6,6 +6,27 @@ import { getWalletBalances } from '@/lib/arc/rpc';
 import { validateWebhookUrl } from '@/lib/security/validateWebhookUrl';
 import { isValidEvmAddress, isValidSolanaAddress } from '@/lib/validation/address';
 
+function evaluateCondition(triggerAmount: number | string, field: string, operator: string, value: string): boolean {
+  const numTrigger = parseFloat(String(triggerAmount || '0'));
+  const numTarget = parseFloat(String(value || '0'));
+
+  switch (operator) {
+    case '>':
+      return numTrigger > numTarget;
+    case '>=':
+      return numTrigger >= numTarget;
+    case '<':
+      return numTrigger < numTarget;
+    case '<=':
+      return numTrigger <= numTarget;
+    case '==':
+    case '=':
+      return numTrigger === numTarget;
+    default:
+      return numTrigger > numTarget;
+  }
+}
+
 /**
  * Inngest Durable Workflow Execution Function
  */
@@ -122,6 +143,56 @@ export const executeWorkflowFunction = inngest.createFunction(
           });
         };
 
+        const nodeType = node.type;
+        const nodeData = node.data || {};
+
+        // Condition Gate Evaluation Node
+        if (nodeType === 'condition') {
+          const field = nodeData.field || 'triggerAmount';
+          const operator = nodeData.operator || '>';
+          const targetValue = nodeData.value || '10';
+          const isTrue = evaluateCondition(triggerAmount, field, operator, targetValue);
+
+          await updateLog({
+            stepId: node.id,
+            nodeType: 'condition',
+            nodeName: nodeData.label || 'Condition Gate',
+            status: 'COMPLETE',
+            details: `Evaluated condition: Inbound deposit (${triggerAmount} USDC) ${operator} ${targetValue} USDC → ${isTrue ? 'TRUE (Branch Met)' : 'FALSE (Branch Not Met)'}`,
+          });
+          return;
+        }
+
+        // Check if node is gated by an incoming edge from a Condition Node
+        const edges = typeof workflow.edges === 'string' ? JSON.parse(workflow.edges) : (workflow.edges || []);
+        const incomingConditionEdge = edges.find((e: any) => {
+          if (e.target !== node.id) return false;
+          const sourceNode = nodes.find((n: any) => n.id === e.source);
+          return sourceNode?.type === 'condition';
+        });
+
+        if (incomingConditionEdge) {
+          const conditionNode = nodes.find((n: any) => n.id === incomingConditionEdge.source);
+          const field = conditionNode?.data?.field || 'triggerAmount';
+          const operator = conditionNode?.data?.operator || '>';
+          const targetValue = conditionNode?.data?.value || '10';
+          const isConditionMet = evaluateCondition(triggerAmount, field, operator, targetValue);
+
+          const requiredHandle = incomingConditionEdge.sourceHandle || 'true';
+          const branchMatches = (isConditionMet && requiredHandle === 'true') || (!isConditionMet && requiredHandle === 'false');
+
+          if (!branchMatches) {
+            await updateLog({
+              stepId: node.id,
+              nodeType: node.type,
+              nodeName: nodeData.label || node.type.toUpperCase(),
+              status: 'SKIPPED',
+              details: `Condition not met: Inbound amount (${triggerAmount} USDC) is not ${operator} ${targetValue} USDC (Required handle: ${requiredHandle})`,
+            });
+            return;
+          }
+        }
+
         if (parseFloat(actionAmount) <= 0) {
           await updateLog({
             stepId: node.id,
@@ -132,9 +203,6 @@ export const executeWorkflowFunction = inngest.createFunction(
           });
           return;
         }
-
-        const nodeType = node.type;
-        const nodeData = node.data || {};
 
         // SIMULATION MODE EXECUTION BRANCH (No Circle / Arc RPC calls)
         if (event.data?.isSimulated) {

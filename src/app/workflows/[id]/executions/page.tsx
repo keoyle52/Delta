@@ -251,11 +251,13 @@ export default function ExecutionsPage({ params }: { params: Promise<{ id: strin
                             <span
                               className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
                                 stepComplete
-                                  ? 'bg-emerald-500/10 text-emerald-400'
+                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                                   : stepPartial
-                                  ? 'bg-amber-500/10 text-amber-400'
+                                  ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
                                   : stepFailed
-                                  ? 'bg-red-500/10 text-red-400'
+                                  ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                                  : stepSkipped
+                                  ? 'bg-slate-800 text-slate-400 border border-slate-700 opacity-70 font-mono'
                                   : 'bg-slate-800 text-slate-400'
                               }`}
                             >

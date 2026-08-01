@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowDownLeft, RefreshCw, Network, Send, Bell, ShieldCheck } from 'lucide-react';
+import { ArrowDownLeft, RefreshCw, Network, Send, Bell, ShieldCheck, GitBranch } from 'lucide-react';
 
 interface NodePaletteProps {
   onAddNode: (type: string) => void;
@@ -16,6 +16,13 @@ export default function NodePalette({ onAddNode }: NodePaletteProps) {
       desc: 'Starts flow when USDC hits wallet',
     },
     {
+      type: 'condition',
+      label: 'Condition Gate',
+      icon: GitBranch,
+      color: 'border-amber-500/40 hover:border-amber-400 bg-amber-950/20 text-amber-300',
+      desc: 'If/Else rule gate (e.g. amount > 10 USDC)',
+    },
+    {
       type: 'swap',
       label: 'Swap Token',
       icon: RefreshCw,
@@ -27,7 +34,7 @@ export default function NodePalette({ onAddNode }: NodePaletteProps) {
       label: 'CCTP Bridge',
       icon: Network,
       color: 'border-blue-500/40 hover:border-blue-400 bg-blue-950/20 text-blue-300',
-      desc: 'Bridge USDC to Solana Devnet',
+      desc: 'Bridge USDC via CCTP to Base Sepolia',
     },
     {
       type: 'send',

@@ -19,6 +19,7 @@ import {
 } from '@xyflow/react';
 
 import TriggerNode from './nodes/TriggerNode';
+import ConditionNode from './nodes/ConditionNode';
 import SwapNode from './nodes/SwapNode';
 import BridgeNode from './nodes/BridgeNode';
 import SendNode from './nodes/SendNode';
@@ -109,7 +110,7 @@ function InnerWorkflowCanvas({
   const [executionState, setExecutionState] = useState<{
     running: boolean;
     activeExecutionId?: string;
-    stepStatuses: Record<string, 'RUNNING' | 'COMPLETE' | 'FAILED'>;
+    stepStatuses: Record<string, 'RUNNING' | 'COMPLETE' | 'FAILED' | 'SKIPPED'>;
   }>({ running: false, stepStatuses: {} });
 
   // History Stack for Undo/Redo (30 steps max)
@@ -192,10 +193,10 @@ function InnerWorkflowCanvas({
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [isDirty]);
 
-  // Calculate total allocation percentage across action nodes
+  // Calculate total allocation percentage across action nodes (excluding trigger and condition nodes)
   const totalAllocation = useMemo(() => {
     return nodes
-      .filter((n) => n.type !== 'trigger')
+      .filter((n) => n.type !== 'trigger' && n.type !== 'condition')
       .reduce((sum, n) => sum + (parseFloat(n.data?.percentage as string) || 0), 0);
   }, [nodes]);
 
@@ -203,6 +204,7 @@ function InnerWorkflowCanvas({
   const nodeTypes = useMemo(
     () => ({
       trigger: TriggerNode,
+      condition: ConditionNode,
       swap: SwapNode,
       bridge: BridgeNode,
       send: SendNode,
@@ -310,8 +312,9 @@ function InnerWorkflowCanvas({
 
       let nodeData: any = { label: `${type.toUpperCase()} Node` };
       if (type === 'trigger') nodeData = { label: 'USDC Received', minAmount: '1.00' };
+      if (type === 'condition') nodeData = { label: 'Condition Gate', field: 'triggerAmount', operator: '>', value: '10' };
       if (type === 'swap') nodeData = { label: 'Swap Token', percentage: '40', tokenOut: 'EURC' };
-      if (type === 'bridge') nodeData = { label: 'CCTP Bridge', percentage: '30', destinationChain: 'Solana_Devnet' };
+      if (type === 'bridge') nodeData = { label: 'CCTP Bridge', percentage: '30', destinationChain: 'Base_Sepolia' };
       if (type === 'send') nodeData = { label: 'Send USDC', percentage: '20' };
       if (type === 'notify') nodeData = { label: 'Notify Alert', template: 'Delta Executed {{amount}} USDC' };
       if (type === 'hold') nodeData = { label: 'Keep Remainder', percentage: '10' };
@@ -535,6 +538,7 @@ function InnerWorkflowCanvas({
       if (stepStatus === 'RUNNING') borderClass = 'ring-4 ring-amber-400/80 shadow-[0_0_20px_rgba(245,158,11,0.5)] animate-pulse';
       if (stepStatus === 'COMPLETE') borderClass = 'ring-4 ring-emerald-400/80 shadow-[0_0_20px_rgba(16,185,129,0.5)]';
       if (stepStatus === 'FAILED') borderClass = 'ring-4 ring-red-500/80 shadow-[0_0_20px_rgba(239,68,68,0.5)]';
+      if (stepStatus === 'SKIPPED') borderClass = 'ring-4 ring-slate-600/60 opacity-50 grayscale';
 
       return {
         ...node,

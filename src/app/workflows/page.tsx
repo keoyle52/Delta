@@ -79,6 +79,23 @@ export default function WorkflowsPage() {
 
   const templates = [
     {
+      key: 'smart-treasury-route',
+      name: 'Smart Treasury Routing',
+      desc: 'IF deposit > 50 USDC → 70% Base CCTP Bridge + 30% Retain, ELSE → 100% Retain Buffer.',
+      badge: 'Conditional Payment Gate',
+      nodes: [
+        { id: 't-1', type: 'trigger', position: { x: 50, y: 180 }, data: { label: 'USDC Received', minAmount: '1.00' } },
+        { id: 'c-1', type: 'condition', position: { x: 320, y: 180 }, data: { label: 'IF > 50 USDC', field: 'triggerAmount', operator: '>', value: '50' } },
+        { id: 'b-1', type: 'bridge', position: { x: 620, y: 80 }, data: { label: 'Base CCTP Bridge', percentage: '70', destinationChain: 'Base_Sepolia' } },
+        { id: 'h-1', type: 'hold', position: { x: 620, y: 280 }, data: { label: 'Retain Buffer', percentage: '30' } },
+      ],
+      edges: [
+        { id: 'e-1', source: 't-1', target: 'c-1', type: 'custom' },
+        { id: 'e-2', source: 'c-1', sourceHandle: 'true', target: 'b-1', type: 'custom' },
+        { id: 'e-3', source: 'c-1', sourceHandle: 'false', target: 'h-1', type: 'custom' },
+      ],
+    },
+    {
       key: 'dca-eurc',
       name: 'Automated DCA into EURC',
       desc: 'Swaps 60% inbound USDC to EURC & retains 40% safe buffer.',
@@ -96,11 +113,11 @@ export default function WorkflowsPage() {
     {
       key: 'bridge-notify',
       name: 'Cross-Chain CCTP & Webhook Alert',
-      desc: 'Bridges 70% USDC to Solana Devnet & sends webhook alert.',
+      desc: 'Bridges 70% USDC to Base Sepolia & sends webhook alert.',
       badge: 'CCTP Cross-Chain',
       nodes: [
         { id: 't-1', type: 'trigger', position: { x: 50, y: 180 }, data: { label: 'USDC Received', minAmount: '1.00' } },
-        { id: 'b-1', type: 'bridge', position: { x: 360, y: 80 }, data: { label: 'Solana CCTP Bridge', percentage: '70', destinationChain: 'Solana_Devnet' } },
+        { id: 'b-1', type: 'bridge', position: { x: 360, y: 80 }, data: { label: 'Base CCTP Bridge', percentage: '70', destinationChain: 'Base_Sepolia' } },
         { id: 'n-1', type: 'notify', position: { x: 360, y: 260 }, data: { label: 'Discord Alert', template: 'CCTP Bridge Executed: {{amount}} USDC' } },
       ],
       edges: [
@@ -111,12 +128,12 @@ export default function WorkflowsPage() {
     {
       key: 'multi-split',
       name: 'Multi-Split Treasury Strategy',
-      desc: 'Splits USDC 40% Swap EURC, 30% CCTP Bridge, 30% Send USDC.',
+      desc: 'Splits USDC 40% Swap EURC, 30% Base CCTP Bridge, 30% Send USDC.',
       badge: 'Treasury Split',
       nodes: [
         { id: 't-1', type: 'trigger', position: { x: 50, y: 180 }, data: { label: 'USDC Received', minAmount: '1.00' } },
         { id: 's-1', type: 'swap', position: { x: 360, y: 40 }, data: { label: 'Swap EURC', percentage: '40', tokenOut: 'EURC' } },
-        { id: 'b-1', type: 'bridge', position: { x: 360, y: 180 }, data: { label: 'Solana Bridge', percentage: '30', destinationChain: 'Solana_Devnet' } },
+        { id: 'b-1', type: 'bridge', position: { x: 360, y: 180 }, data: { label: 'Base Bridge', percentage: '30', destinationChain: 'Base_Sepolia' } },
         { id: 'sd-1', type: 'send', position: { x: 360, y: 320 }, data: { label: 'Send Partner', percentage: '30' } },
       ],
       edges: [

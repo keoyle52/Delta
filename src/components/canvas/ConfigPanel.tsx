@@ -97,6 +97,52 @@ export default function ConfigPanel({ selectedNode, onUpdateNode, onDeleteNode }
           </div>
         )}
 
+        {/* CONDITION NODE CONFIG */}
+        {type === 'condition' && (
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-300">Evaluation Field</label>
+              <select
+                value={data.field || 'triggerAmount'}
+                onChange={(e) => handleChange('field', e.target.value)}
+                className="w-full rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-amber-500 focus:outline-none"
+              >
+                <option value="triggerAmount">Inbound Deposit Amount (USDC)</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-300">Comparison Operator</label>
+              <select
+                value={data.operator || '>'}
+                onChange={(e) => handleChange('operator', e.target.value)}
+                className="w-full rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-amber-500 focus:outline-none font-mono"
+              >
+                <option value=">">{'>'} Greater Than</option>
+                <option value=">=">{'>='} Greater Than or Equal</option>
+                <option value="<">{'<'} Less Than</option>
+                <option value="<=">{'<='} Less Than or Equal</option>
+                <option value="==">{'=='} Equals</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-300">Threshold Value (USDC)</label>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={data.value || '10'}
+                onChange={(e) => handleChange('value', e.target.value)}
+                className="w-full rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-amber-500 focus:outline-none font-mono"
+              />
+              <p className="text-[11px] text-slate-500">
+                Connect the green (True) or red (False) handle to route payments based on this condition.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* SWAP NODE CONFIG */}
         {type === 'swap' && (
           <div className="space-y-4">
@@ -144,14 +190,14 @@ export default function ConfigPanel({ selectedNode, onUpdateNode, onDeleteNode }
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-slate-300">Target Destination Chain</label>
               <select
-                value={data.destinationChain || 'Solana_Devnet'}
+                value={data.destinationChain || 'Base_Sepolia'}
                 onChange={(e) => handleChange('destinationChain', e.target.value)}
                 className="w-full rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
               >
+                <option value="Base_Sepolia">Base Sepolia (Base_Sepolia)</option>
                 <option value="Solana_Devnet">Solana Devnet (Solana_Devnet)</option>
                 <option value="Arbitrum_Sepolia">Arbitrum Sepolia (Arbitrum_Sepolia)</option>
                 <option value="Avalanche_Fuji">Avalanche Fuji (Avalanche_Fuji)</option>
-                <option value="Base_Sepolia">Base Sepolia (Base_Sepolia)</option>
                 <option value="Ethereum_Sepolia">Ethereum Sepolia (Ethereum_Sepolia)</option>
                 <option value="Optimism_Sepolia">OP Sepolia (Optimism_Sepolia)</option>
                 <option value="Polygon_Amoy_Testnet">Polygon PoS Amoy (Polygon_Amoy_Testnet)</option>
@@ -166,7 +212,7 @@ export default function ConfigPanel({ selectedNode, onUpdateNode, onDeleteNode }
               <div className="flex items-center justify-between">
                 <label className="text-xs font-medium text-slate-300">Destination Recipient Address</label>
                 {data.destinationAddress && !(
-                  (data.destinationChain || 'Solana_Devnet') === 'Solana_Devnet'
+                  (data.destinationChain || 'Base_Sepolia') === 'Solana_Devnet'
                     ? isValidSolanaAddress(data.destinationAddress)
                     : isValidEvmAddress(data.destinationAddress)
                 ) && (
@@ -178,7 +224,7 @@ export default function ConfigPanel({ selectedNode, onUpdateNode, onDeleteNode }
               <input
                 type="text"
                 placeholder={
-                  (data.destinationChain || 'Solana_Devnet') === 'Solana_Devnet'
+                  (data.destinationChain || 'Base_Sepolia') === 'Solana_Devnet'
                     ? 'e.g. 7xKXtg2CW87d97TXJ...'
                     : 'e.g. 0x742d35Cc6634C0532925a3b844Bc454e4438f44e'
                 }
@@ -186,7 +232,7 @@ export default function ConfigPanel({ selectedNode, onUpdateNode, onDeleteNode }
                 onChange={(e) => handleChange('destinationAddress', e.target.value)}
                 className={`w-full rounded-lg border px-3 py-2 text-sm text-slate-200 focus:outline-none font-mono text-xs ${
                   data.destinationAddress && !(
-                    (data.destinationChain || 'Solana_Devnet') === 'Solana_Devnet'
+                    (data.destinationChain || 'Base_Sepolia') === 'Solana_Devnet'
                       ? isValidSolanaAddress(data.destinationAddress)
                       : isValidEvmAddress(data.destinationAddress)
                   )
