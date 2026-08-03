@@ -94,6 +94,15 @@ export default function LoginPage() {
             <span className="h-1.5 w-1.5 rounded-full bg-purple-400 animate-pulse" />
             Built on Arc Testnet
           </div>
+
+          {/* Arc proof badge */}
+          <div className="inline-flex items-center gap-2 rounded-full border border-slate-700/60 bg-slate-900/60 px-4 py-1.5 text-[11px] font-semibold text-slate-300 backdrop-blur-sm mt-2">
+            <span>⚡ Sub-second finality</span>
+            <span className="text-slate-600">•</span>
+            <span>💵 ~$0.01 target gas fee</span>
+            <span className="text-slate-600">—</span>
+            <span className="text-indigo-400 font-bold">powered by Arc</span>
+          </div>
         </div>
 
         {error && (

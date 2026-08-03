@@ -3,40 +3,9 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { validateAllocationGraph } from '@/lib/validation/allocation';
 
-function validateWorkflowPercentages(nodesInput: any): { valid: boolean; total: number; error?: string } {
-  try {
-    const nodes = typeof nodesInput === 'string' ? JSON.parse(nodesInput) : (nodesInput || []);
-    const triggerNode = nodes.find((n: any) => n.type === 'trigger');
 
-    if (!triggerNode) {
-      return { valid: true, total: 0 };
-    }
-
-    const actionNodes = nodes.filter((n: any) => n.type !== 'trigger');
-    let sumPercentage = 0;
-
-    for (const node of actionNodes) {
-      const p = parseFloat(node.data?.percentage || '0');
-      if (isNaN(p) || p < 0) {
-        return { valid: false, total: 0, error: `Invalid percentage value on node ${node.data?.label || node.id}` };
-      }
-      sumPercentage += p;
-    }
-
-    if (sumPercentage > 100) {
-      return {
-        valid: false,
-        total: sumPercentage,
-        error: `Total action allocation is ${sumPercentage}%, which exceeds the 100% maximum limit.`,
-      };
-    }
-
-    return { valid: true, total: sumPercentage };
-  } catch (err: any) {
-    return { valid: false, total: 0, error: 'Malformed node JSON structure' };
-  }
-}
 
 export async function GET(req: NextRequest) {
   try {
@@ -80,8 +49,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Workflow name is required' }, { status: 400 });
     }
 
-    // Strict percentage sum validation <= 100%
-    const validation = validateWorkflowPercentages(nodes);
+    // Graph-aware branch allocation validation (max 100% per branch)
+    const validation = validateAllocationGraph(nodes, edges);
     if (!validation.valid) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }

@@ -30,6 +30,7 @@ import CustomLabeledEdge from './edges/CustomLabeledEdge';
 import NodePalette from './NodePalette';
 import ConfigPanel from './ConfigPanel';
 import { ToastProvider, useToast } from '@/components/ui/Toast';
+import { validateAllocationGraph } from '@/lib/validation/allocation';
 import {
   Save,
   AlertTriangle,
@@ -41,6 +42,7 @@ import {
   Sparkles,
   LayoutGrid,
   Activity,
+  Info,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -193,12 +195,12 @@ function InnerWorkflowCanvas({
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [isDirty]);
 
-  // Calculate total allocation percentage across action nodes (excluding trigger and condition nodes)
-  const totalAllocation = useMemo(() => {
-    return nodes
-      .filter((n) => n.type !== 'trigger' && n.type !== 'condition')
-      .reduce((sum, n) => sum + (parseFloat(n.data?.percentage as string) || 0), 0);
-  }, [nodes]);
+  const [showBranchTooltip, setShowBranchTooltip] = useState(false);
+
+  // Graph-aware allocation validation result (evaluates mutually exclusive condition branches independently)
+  const allocationResult = useMemo(() => {
+    return validateAllocationGraph(nodes, edges);
+  }, [nodes, edges]);
 
   // Register custom node & edge components
   const nodeTypes = useMemo(
@@ -431,11 +433,11 @@ function InnerWorkflowCanvas({
 
   // Save Flow to API
   const handleSave = async () => {
-    if (totalAllocation > 100) {
+    if (!allocationResult.valid) {
       addToast(
         'Allocation Exceeded',
         'error',
-        `Total allocation percentage (${totalAllocation}%) exceeds 100%. Please adjust node allocations.`
+        allocationResult.error || 'Branch allocation percentage exceeds 100%. Please adjust node allocations.'
       );
       return;
     }
@@ -609,18 +611,59 @@ function InnerWorkflowCanvas({
             {isActive ? 'Active' : 'Paused'}
           </button>
 
-          {/* Allocation Gauge Badge */}
-          <div
-            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold border transition-colors ${
-              totalAllocation > 100
-                ? 'bg-red-500/20 text-red-300 border-red-500/40 shadow-red-500/20 animate-pulse'
-                : totalAllocation === 100
-                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
-            }`}
-          >
-            {totalAllocation > 100 && <AlertTriangle className="h-3.5 w-3.5 text-red-400 shrink-0" />}
-            <span>Total Allocation: {totalAllocation}% / 100%</span>
+          {/* Allocation Gauge Badge & Branch Details Popover */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowBranchTooltip((prev) => !prev)}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold border transition-colors cursor-pointer ${
+                !allocationResult.valid
+                  ? 'bg-red-500/20 text-red-300 border-red-500/40 shadow-red-500/20 animate-pulse'
+                  : allocationResult.maxTotal === 100
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                  : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
+              }`}
+              title="Click to view branch allocation breakdown"
+            >
+              {!allocationResult.valid && <AlertTriangle className="h-3.5 w-3.5 text-red-400 shrink-0" />}
+              <span>
+                {allocationResult.hasBranches
+                  ? allocationResult.valid
+                    ? `Branches OK (${allocationResult.branchTotals.length} validated)`
+                    : `Branch exceeded (${allocationResult.maxTotal}% / 100%)`
+                  : `Total Allocation: ${allocationResult.maxTotal}% / 100%`}
+              </span>
+              <Info className="h-3 w-3 opacity-70 hover:opacity-100 ml-0.5" />
+            </button>
+
+            {/* Branch Details Popover */}
+            {showBranchTooltip && (
+              <div className="absolute top-full left-0 mt-2 z-50 min-w-[250px] rounded-xl border border-slate-800 bg-slate-900/95 p-3 shadow-2xl backdrop-blur-md text-xs space-y-2">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-1.5 font-semibold text-white">
+                  <span>Branch Allocation Breakdown</span>
+                  <span className="text-[10px] text-slate-400">Max 100% per branch</span>
+                </div>
+                <div className="space-y-1.5">
+                  {allocationResult.branchTotals.map((b) => (
+                    <div key={b.groupKey} className="flex items-center justify-between font-mono">
+                      <span className="text-slate-300 truncate max-w-[160px]">{b.groupName}:</span>
+                      <span
+                        className={`font-bold ${
+                          b.total > 100 ? 'text-red-400' : b.total === 100 ? 'text-emerald-400' : 'text-indigo-300'
+                        }`}
+                      >
+                        {b.total}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {allocationResult.error && (
+                  <p className="text-[11px] text-red-400 border-t border-red-500/20 pt-1.5 font-medium leading-tight">
+                    {allocationResult.error}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
