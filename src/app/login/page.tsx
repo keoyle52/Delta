@@ -11,6 +11,18 @@ export default function LoginPage() {
   const { login, ready, authenticated, user: privyUser, getAccessToken } = usePrivy();
   const [loggingIn, setLoggingIn] = useState(false);
   const [error, setError] = useState('');
+  const [totalRealTx, setTotalRealTx] = useState<number>(0);
+
+  useEffect(() => {
+    fetch('/api/stats/arc-advantage')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.totals?.totalRealTransactions) {
+          setTotalRealTx(data.totals.totalRealTransactions);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Automatically sync Privy login session with NextAuth & Circle wallet provisioning
   useEffect(() => {
@@ -96,10 +108,16 @@ export default function LoginPage() {
           </div>
 
           {/* Arc proof badge */}
-          <div className="inline-flex items-center gap-2 rounded-full border border-slate-700/60 bg-slate-900/60 px-4 py-1.5 text-[11px] font-semibold text-slate-300 backdrop-blur-sm mt-2">
-            <span>⚡ Sub-second finality</span>
+          <div className="inline-flex flex-wrap items-center justify-center gap-2 rounded-full border border-slate-700/60 bg-slate-900/60 px-4 py-1.5 text-[11px] font-semibold text-slate-300 backdrop-blur-sm mt-2">
+            <span>Sub-second finality</span>
             <span className="text-slate-600">•</span>
-            <span>💵 ~$0.01 target gas fee</span>
+            <span>~$0.01 target gas fee</span>
+            {totalRealTx > 0 && (
+              <>
+                <span className="text-slate-600">•</span>
+                <span className="text-emerald-400 font-bold">{totalRealTx} real transactions processed</span>
+              </>
+            )}
             <span className="text-slate-600">—</span>
             <span className="text-indigo-400 font-bold">powered by Arc</span>
           </div>

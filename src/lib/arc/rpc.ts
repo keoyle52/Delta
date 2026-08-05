@@ -112,3 +112,28 @@ export async function getWalletBalances(address: string) {
     throw new Error(`Failed to fetch live balances from Arc Testnet RPC: ${error.message}`);
   }
 }
+
+/**
+ * Fetch transaction receipt from Arc Testnet RPC and calculate actual USDC gas fee paid.
+ * Returns null if receipt is not available or if query fails.
+ */
+export async function getTxFeePaidUsdc(txHash: string): Promise<number | null> {
+  if (!txHash || typeof txHash !== 'string' || !txHash.startsWith('0x') || txHash.startsWith('0xsim-')) {
+    return null;
+  }
+  try {
+    const client = getArcPublicClient();
+    const receipt = await client.getTransactionReceipt({ hash: txHash as `0x${string}` });
+    if (!receipt || !receipt.gasUsed || !receipt.effectiveGasPrice) {
+      return null;
+    }
+    const totalGasCostWei = receipt.gasUsed * receipt.effectiveGasPrice;
+    // Native gas token on Arc uses 18 decimals (USDC)
+    const feeUsdc = parseFloat(formatUnits(totalGasCostWei, 18));
+    return isNaN(feeUsdc) ? null : feeUsdc;
+  } catch (error: any) {
+    console.warn(`[ARC RPC] Could not fetch tx receipt for gas calculation (${txHash}):`, error.message || error);
+    return null;
+  }
+}
+

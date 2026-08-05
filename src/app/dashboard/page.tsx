@@ -419,117 +419,26 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Arc Advantage Performance & Fee Metrics Section */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-indigo-400" />
-            <h2 className="text-xl font-bold tracking-tight text-white font-sans">
-              Arc Advantage Metrics
-            </h2>
+      {/* Arc Advantage Metrics Link Banner */}
+      <div className="rounded-2xl border border-indigo-500/30 bg-gradient-to-r from-indigo-950/40 via-slate-900 to-slate-900 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 backdrop-blur-xl">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/20 text-indigo-400">
+            <TrendingUp className="h-5 w-5" />
           </div>
-          <span className="text-xs text-slate-500 font-mono">
-            Benchmarked against published Layer-1 & CCTP standards
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Metric 1: Time Saved */}
-          <div className="rounded-2xl border border-indigo-500/30 bg-gradient-to-br from-indigo-950/40 via-slate-900 to-slate-900 p-6 flex flex-col justify-between space-y-4 backdrop-blur-xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 p-6 opacity-10 pointer-events-none">
-              <Clock className="h-24 w-24 text-indigo-400" />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-indigo-400">
-                Settlement & Finality Speed
-              </span>
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-500/20 text-indigo-400">
-                <Clock className="h-4 w-4" />
-              </div>
-            </div>
-
-            <div className="space-y-2 relative z-10">
-              {arcAdvantageStats?.avgCompletionTimeSeconds !== null && arcAdvantageStats?.avgCompletionTimeSeconds !== undefined ? (
-                <>
-                  <div className="text-3xl font-extrabold text-white font-sans tracking-tight">
-                    {Math.max(0, Math.floor((TYPICAL_CROSSCHAIN_WAIT_SECONDS - arcAdvantageStats.avgCompletionTimeSeconds) / 60))}m {Math.floor((TYPICAL_CROSSCHAIN_WAIT_SECONDS - arcAdvantageStats.avgCompletionTimeSeconds) % 60)}s Faster
-                  </div>
-                  <p className="text-xs text-slate-300">
-                    per transaction vs. typical ~15 min cross-chain CCTP settlement window.
-                  </p>
-                  <p className="text-[11px] text-slate-500 font-mono">
-                    Real avg execution speed: <strong>{arcAdvantageStats.avgCompletionTimeSeconds}s</strong> across {arcAdvantageStats.totalRealExecutions} live execution(s).
-                  </p>
-                </>
-              ) : (
-                <>
-                  <div className="text-3xl font-extrabold text-white font-sans tracking-tight">
-                    Sub-Second Finality
-                  </div>
-                  <p className="text-xs text-slate-300">
-                    Sub-second deterministic finality vs. ~15 min typical cross-chain wait window.
-                  </p>
-                  <p className="text-[11px] text-slate-500 font-mono">
-                    Telemetry benchmark active (awaits first on-chain execution).
-                  </p>
-                </>
-              )}
-            </div>
-
-            <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
-              <span className="text-slate-400 font-medium">Circle CCTP Attestation Window Comparison</span>
-              <a
-                href="https://docs.arc.io"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-slate-500 hover:text-indigo-400 font-mono inline-flex items-center gap-1 transition-colors"
-              >
-                Source: docs.arc.io <ExternalLink className="h-3 w-3" />
-              </a>
-            </div>
-          </div>
-
-          {/* Metric 2: Fees Saved */}
-          <div className="rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-950/40 via-slate-900 to-slate-900 p-6 flex flex-col justify-between space-y-4 backdrop-blur-xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 p-6 opacity-10 pointer-events-none">
-              <Coins className="h-24 w-24 text-emerald-400" />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-                Transaction Cost Efficiency
-              </span>
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-400">
-                <Coins className="h-4 w-4" />
-              </div>
-            </div>
-
-            <div className="space-y-2 relative z-10">
-              <div className="text-3xl font-extrabold text-white font-sans tracking-tight">
-                ~${(TYPICAL_L1_MULTISTEP_FEE_USD - ARC_TARGET_FEE_USD).toFixed(2)} Saved
-              </div>
-              <p className="text-xs text-slate-300">
-                per multi-step transaction vs. typical general-purpose L1 gas costs.
-              </p>
-              <p className="text-[11px] text-slate-500 font-mono">
-                Based on Arc&apos;s published <strong>~${ARC_TARGET_FEE_USD.toFixed(2)}</strong> target base fee vs. ~${TYPICAL_L1_MULTISTEP_FEE_USD.toFixed(2)} L1 multi-step gas.
-              </p>
-            </div>
-
-            <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
-              <span className="text-slate-400 font-medium">Arc Base Fee Target (~$0.01)</span>
-              <a
-                href="https://docs.arc.io"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-slate-500 hover:text-emerald-400 font-mono inline-flex items-center gap-1 transition-colors"
-              >
-                Source: docs.arc.io <ExternalLink className="h-3 w-3" />
-              </a>
-            </div>
+          <div>
+            <h3 className="text-sm font-bold text-white font-sans">Why Arc Performance Metrics</h3>
+            <p className="text-xs text-slate-400">
+              How this project performs on Arc, based on completed transactions.
+            </p>
           </div>
         </div>
+        <Link
+          href="/why-arc"
+          className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-indigo-600/20 border border-indigo-500/40 px-4 py-2 text-xs font-semibold text-indigo-300 hover:bg-indigo-600/30 transition-colors shrink-0"
+        >
+          <span>See Why Arc</span>
+          <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
       </div>
 
       {/* Workflows Overview Section */}

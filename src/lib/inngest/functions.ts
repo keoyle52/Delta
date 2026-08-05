@@ -2,7 +2,7 @@ import { inngest } from './client';
 import { prisma } from '@/lib/prisma';
 import { executeAppKitSwap, executeAppKitBridge, executeAppKitSend } from '@/lib/circle/app-kit';
 import { sendArcTransfer } from '@/lib/circle/wallets';
-import { getWalletBalances } from '@/lib/arc/rpc';
+import { getWalletBalances, getTxFeePaidUsdc } from '@/lib/arc/rpc';
 import { validateWebhookUrl } from '@/lib/security/validateWebhookUrl';
 import { isValidEvmAddress, isValidSolanaAddress } from '@/lib/validation/address';
 
@@ -120,20 +120,42 @@ export const executeWorkflowFunction = inngest.createFunction(
             ? JSON.parse(freshExec.stepLogs)
             : (freshExec?.stepLogs || []);
 
+          const nowIso = new Date().toISOString();
+          const isFinalStatus = logEntry.status === 'COMPLETE' || logEntry.status === 'FAILED';
+
+          // Real fee calculation for on-chain non-simulated complete transactions
+          let feePaidUsdc: number | null = rawLogEntry.feePaidUsdc !== undefined ? rawLogEntry.feePaidUsdc : null;
+          if (!event.data?.isSimulated && isFinalStatus && logEntry.txHash && feePaidUsdc === null) {
+            feePaidUsdc = await getTxFeePaidUsdc(logEntry.txHash);
+          }
+
           const existingIndex = logs.findIndex(
             (l: any) => l.stepId === logEntry.stepId && (l.status === 'RUNNING' || l.status === 'PARTIAL')
           );
 
           if (existingIndex >= 0) {
+            const existing = logs[existingIndex];
+            const startedAt = existing.startedAt || existing.timestamp || nowIso;
+            const completedAt = isFinalStatus ? nowIso : (existing.completedAt || null);
+
             logs[existingIndex] = {
-              ...logs[existingIndex],
+              ...existing,
               ...logEntry,
-              timestamp: new Date().toISOString(),
+              startedAt,
+              ...(completedAt ? { completedAt } : {}),
+              ...(!event.data?.isSimulated && feePaidUsdc !== null ? { feePaidUsdc } : {}),
+              timestamp: nowIso,
             };
           } else {
+            const startedAt = logEntry.startedAt || nowIso;
+            const completedAt = isFinalStatus ? nowIso : null;
+
             logs.push({
               ...logEntry,
-              timestamp: new Date().toISOString(),
+              startedAt,
+              ...(completedAt ? { completedAt } : {}),
+              ...(!event.data?.isSimulated && feePaidUsdc !== null ? { feePaidUsdc } : {}),
+              timestamp: nowIso,
             });
           }
 
