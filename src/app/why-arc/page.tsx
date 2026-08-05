@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Header from '@/components/layout/Header';
 import {
   TrendingUp,
   Clock,
@@ -14,7 +13,6 @@ import {
   ArrowUpRight,
 } from 'lucide-react';
 import {
-  ARC_TARGET_FEE_USD,
   TYPICAL_WAIT_SECONDS,
   TYPICAL_FEE_USD,
 } from '@/lib/arc-advantage-constants';
@@ -96,11 +94,12 @@ export default function WhyArcPage() {
   }, []);
 
   const totalRealTx = data?.totals?.totalRealTransactions || 0;
+  const hasTimeData = (data?.totals?.totalTimeSavedSeconds || 0) > 0;
+  const hasFeeData = (data?.totals?.totalFeeSavedUsd || 0) > 0;
+  const isHistoricalMissingMetrics = totalRealTx > 0 && (!hasTimeData || !hasFeeData);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500/30 selection:text-indigo-200 pb-20">
-      <Header />
-
       <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-8 space-y-8">
         {/* Page Header */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-800/80 pb-6">
@@ -143,6 +142,16 @@ export default function WhyArcPage() {
           </div>
         )}
 
+        {/* Historical Data Notice */}
+        {isHistoricalMissingMetrics && (
+          <div className="rounded-xl border border-indigo-500/20 bg-indigo-950/30 p-3 text-xs text-indigo-300 flex items-center gap-2">
+            <Zap className="h-4 w-4 text-indigo-400 shrink-0" />
+            <span>
+              Some historical transactions predate detailed fee/duration tracking — newer transactions will show full metrics.
+            </span>
+          </div>
+        )}
+
         {/* 1. Top Summary Banner (3 Stat Cards) */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Card 1: Total Real Transactions */}
@@ -180,7 +189,7 @@ export default function WhyArcPage() {
             </div>
             <div>
               <div className="text-3xl font-extrabold text-white font-sans tracking-tight">
-                {loading ? '...' : formatDuration(data?.totals?.totalTimeSavedSeconds || 0)}
+                {loading ? '...' : hasTimeData ? formatDuration(data!.totals.totalTimeSavedSeconds) : 'N/A'}
               </div>
               <p className="mt-1 text-xs text-slate-300">
                 Saved compared to typical general-purpose L1 confirmation times
@@ -203,7 +212,7 @@ export default function WhyArcPage() {
             </div>
             <div>
               <div className="text-3xl font-extrabold text-white font-sans tracking-tight">
-                {loading ? '...' : `$${(data?.totals?.totalFeeSavedUsd || 0).toFixed(2)}`}
+                {loading ? '...' : hasFeeData ? `$${data!.totals.totalFeeSavedUsd.toFixed(2)}` : 'N/A'}
               </div>
               <p className="mt-1 text-xs text-slate-300">
                 Saved compared to typical general-purpose L1 gas costs
@@ -240,7 +249,7 @@ export default function WhyArcPage() {
                   <span className="font-semibold text-white font-mono">
                     {data?.byType?.bridge?.avgActualDurationSeconds !== null && data?.byType?.bridge?.avgActualDurationSeconds !== undefined
                       ? `${data.byType.bridge.avgActualDurationSeconds}s`
-                      : 'Sub-second'}{' '}
+                      : 'N/A'}{' '}
                     <span className="text-slate-500 font-normal">(typical: ~15min)</span>
                   </span>
                 </div>
@@ -249,19 +258,23 @@ export default function WhyArcPage() {
                   <span className="font-semibold text-white font-mono">
                     {data?.byType?.bridge?.avgActualFeeUsd !== null && data?.byType?.bridge?.avgActualFeeUsd !== undefined
                       ? `$${data.byType.bridge.avgActualFeeUsd.toFixed(4)}`
-                      : `~$${ARC_TARGET_FEE_USD.toFixed(2)}`}{' '}
+                      : 'Pending'}{' '}
                     <span className="text-slate-500 font-normal">(typical: ~$3.50)</span>
                   </span>
                 </div>
                 <div className="flex justify-between py-1 font-bold text-emerald-400">
                   <span>Total Saved:</span>
-                  <span className="font-mono">${(data?.byType?.bridge?.totalFeeSavedUsd || 0).toFixed(2)}</span>
+                  <span className="font-mono">
+                    {data?.byType?.bridge?.totalFeeSavedUsd ? `$${data.byType.bridge.totalFeeSavedUsd.toFixed(2)}` : 'N/A'}
+                  </span>
                 </div>
               </div>
 
               <p className="text-[11px] text-slate-500 border-t border-slate-800/80 pt-3">
                 {data?.byType?.bridge?.count
-                  ? `${data.byType.bridge.count} bridges completed • avg ${data.byType.bridge.avgActualDurationSeconds ?? 0.8}s (typical: ~15min) • avg $${data.byType.bridge.avgActualFeeUsd ?? 0.01} fee (typical: ~$3.50) • $${data.byType.bridge.totalFeeSavedUsd.toFixed(2)} saved`
+                  ? (data.byType.bridge.avgActualDurationSeconds !== null || data.byType.bridge.avgActualFeeUsd !== null)
+                    ? `${data.byType.bridge.count} bridges completed • avg ${data.byType.bridge.avgActualDurationSeconds ?? 'N/A'}s (typical: ~15min) • avg ${data.byType.bridge.avgActualFeeUsd ? `$${data.byType.bridge.avgActualFeeUsd.toFixed(4)}` : 'N/A'} fee (typical: ~$3.50) • $${data.byType.bridge.totalFeeSavedUsd.toFixed(2)} saved`
+                    : `${data.byType.bridge.count} bridges completed on-chain — fee/duration metrics available once fee tracking data is present for these transactions.`
                   : '0 bridges completed • typical L1 window ~15min vs sub-second on Arc'}
               </p>
             </div>
@@ -284,7 +297,7 @@ export default function WhyArcPage() {
                   <span className="font-semibold text-white font-mono">
                     {data?.byType?.swap?.avgActualDurationSeconds !== null && data?.byType?.swap?.avgActualDurationSeconds !== undefined
                       ? `${data.byType.swap.avgActualDurationSeconds}s`
-                      : 'Sub-second'}{' '}
+                      : 'N/A'}{' '}
                     <span className="text-slate-500 font-normal">(typical: ~15s)</span>
                   </span>
                 </div>
@@ -293,19 +306,23 @@ export default function WhyArcPage() {
                   <span className="font-semibold text-white font-mono">
                     {data?.byType?.swap?.avgActualFeeUsd !== null && data?.byType?.swap?.avgActualFeeUsd !== undefined
                       ? `$${data.byType.swap.avgActualFeeUsd.toFixed(4)}`
-                      : `~$${ARC_TARGET_FEE_USD.toFixed(2)}`}{' '}
+                      : 'Pending'}{' '}
                     <span className="text-slate-500 font-normal">(typical: ~$2.00)</span>
                   </span>
                 </div>
                 <div className="flex justify-between py-1 font-bold text-emerald-400">
                   <span>Total Saved:</span>
-                  <span className="font-mono">${(data?.byType?.swap?.totalFeeSavedUsd || 0).toFixed(2)}</span>
+                  <span className="font-mono">
+                    {data?.byType?.swap?.totalFeeSavedUsd ? `$${data.byType.swap.totalFeeSavedUsd.toFixed(2)}` : 'N/A'}
+                  </span>
                 </div>
               </div>
 
               <p className="text-[11px] text-slate-500 border-t border-slate-800/80 pt-3">
                 {data?.byType?.swap?.count
-                  ? `${data.byType.swap.count} swaps completed • avg ${data.byType.swap.avgActualDurationSeconds ?? 0.6}s (typical: ~15s) • avg $${data.byType.swap.avgActualFeeUsd ?? 0.01} fee (typical: ~$2.00) • $${data.byType.swap.totalFeeSavedUsd.toFixed(2)} saved`
+                  ? (data.byType.swap.avgActualDurationSeconds !== null || data.byType.swap.avgActualFeeUsd !== null)
+                    ? `${data.byType.swap.count} swaps completed • avg ${data.byType.swap.avgActualDurationSeconds ?? 'N/A'}s (typical: ~15s) • avg ${data.byType.swap.avgActualFeeUsd ? `$${data.byType.swap.avgActualFeeUsd.toFixed(4)}` : 'N/A'} fee (typical: ~$2.00) • $${data.byType.swap.totalFeeSavedUsd.toFixed(2)} saved`
+                    : `${data.byType.swap.count} swaps completed on-chain — fee/duration metrics available once fee tracking data is present for these transactions.`
                   : '0 swaps completed • typical L1 wait ~15s vs sub-second on Arc'}
               </p>
             </div>
@@ -328,7 +345,7 @@ export default function WhyArcPage() {
                   <span className="font-semibold text-white font-mono">
                     {data?.byType?.send?.avgActualDurationSeconds !== null && data?.byType?.send?.avgActualDurationSeconds !== undefined
                       ? `${data.byType.send.avgActualDurationSeconds}s`
-                      : 'Sub-second'}{' '}
+                      : 'N/A'}{' '}
                     <span className="text-slate-500 font-normal">(typical: ~60s)</span>
                   </span>
                 </div>
@@ -337,19 +354,23 @@ export default function WhyArcPage() {
                   <span className="font-semibold text-white font-mono">
                     {data?.byType?.send?.avgActualFeeUsd !== null && data?.byType?.send?.avgActualFeeUsd !== undefined
                       ? `$${data.byType.send.avgActualFeeUsd.toFixed(4)}`
-                      : `~$${ARC_TARGET_FEE_USD.toFixed(2)}`}{' '}
+                      : 'Pending'}{' '}
                     <span className="text-slate-500 font-normal">(typical: ~$1.00)</span>
                   </span>
                 </div>
                 <div className="flex justify-between py-1 font-bold text-emerald-400">
                   <span>Total Saved:</span>
-                  <span className="font-mono">${(data?.byType?.send?.totalFeeSavedUsd || 0).toFixed(2)}</span>
+                  <span className="font-mono">
+                    {data?.byType?.send?.totalFeeSavedUsd ? `$${data.byType.send.totalFeeSavedUsd.toFixed(2)}` : 'N/A'}
+                  </span>
                 </div>
               </div>
 
               <p className="text-[11px] text-slate-500 border-t border-slate-800/80 pt-3">
                 {data?.byType?.send?.count
-                  ? `${data.byType.send.count} sends completed • avg ${data.byType.send.avgActualDurationSeconds ?? 0.4}s (typical: ~60s) • avg $${data.byType.send.avgActualFeeUsd ?? 0.01} fee (typical: ~$1.00) • $${data.byType.send.totalFeeSavedUsd.toFixed(2)} saved`
+                  ? (data.byType.send.avgActualDurationSeconds !== null || data.byType.send.avgActualFeeUsd !== null)
+                    ? `${data.byType.send.count} sends completed • avg ${data.byType.send.avgActualDurationSeconds ?? 'N/A'}s (typical: ~60s) • avg ${data.byType.send.avgActualFeeUsd ? `$${data.byType.send.avgActualFeeUsd.toFixed(4)}` : 'N/A'} fee (typical: ~$1.00) • $${data.byType.send.totalFeeSavedUsd.toFixed(2)} saved`
+                    : `${data.byType.send.count} sends completed on-chain — fee/duration metrics available once fee tracking data is present for these transactions.`
                   : '0 sends completed • typical L1 wait ~60s vs sub-second on Arc'}
               </p>
             </div>
@@ -434,10 +455,10 @@ export default function WhyArcPage() {
                       </td>
                       <td className="px-4 py-3 text-slate-300 font-sans">{tx.workflowName}</td>
                       <td className="px-4 py-3 text-slate-300">
-                        {tx.actualDurationSeconds !== null ? `${tx.actualDurationSeconds}s` : 'Sub-second'}
+                        {tx.actualDurationSeconds !== null ? `${tx.actualDurationSeconds}s` : 'N/A'}
                       </td>
                       <td className="px-4 py-3 text-slate-300">
-                        {tx.actualFeeUsd !== null ? `$${tx.actualFeeUsd.toFixed(4)}` : `~$${ARC_TARGET_FEE_USD.toFixed(2)}`}
+                        {tx.actualFeeUsd !== null ? `$${tx.actualFeeUsd.toFixed(4)}` : 'Pending'}
                       </td>
                       <td className="px-4 py-3 text-right text-indigo-300 font-semibold">
                         {tx.timeSavedSeconds !== null ? formatDuration(tx.timeSavedSeconds) : '-'}

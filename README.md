@@ -80,4 +80,7 @@ Before deploying Delta to production environments, complete the following securi
    Replace any test Alchemy keys (`ARC_RPC_PRIMARY`) and Circle API keys (`CIRCLE_API_KEY`) with production-scoped tokens.
 3. **Enforce Rate Limiting & Webhook Validation**:
    Verify that SSRF protection (`validateWebhookUrl`) and rate limiting middleware (`checkRateLimit`) remain active across all endpoint handlers.
+4. **Dedicated Arc RPC Notice**:
+   > **Important**: For production/demo use, `ARC_RPC_PRIMARY` must be set to a dedicated RPC endpoint (e.g. Alchemy) in Vercel environment variables — the public fallback RPC may have stricter rate limits and could cause `getTransactionReceipt` calls to fail silently (resulting in null fee data).
+
 
