@@ -83,4 +83,10 @@ Before deploying Delta to production environments, complete the following securi
 4. **Dedicated Arc RPC Notice**:
    > **Important**: For production/demo use, `ARC_RPC_PRIMARY` must be set to a dedicated RPC endpoint (e.g. Alchemy) in Vercel environment variables — the public fallback RPC may have stricter rate limits and could cause `getTransactionReceipt` calls to fail silently (resulting in null fee data).
 
+---
+
+## 🛠️ Internal Development Scripts
+
+The `scripts/` directory contains internal setup and maintenance scripts (`create-wallet-set.ts`, `register-entity-secret-sdk.ts`, `clean-old-executions.ts`). These are internal developer tooling scripts and not part of the runtime web application bundle.
+
 

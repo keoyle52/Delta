@@ -22,11 +22,7 @@ import {
   Clock,
   TrendingUp,
 } from 'lucide-react';
-import {
-  ARC_TARGET_FEE_USD,
-  TYPICAL_L1_MULTISTEP_FEE_USD,
-  TYPICAL_CROSSCHAIN_WAIT_SECONDS,
-} from '@/lib/arc-advantage-constants';
+import { ARC_TARGET_FEE_USD } from '@/lib/arc-advantage-constants';
 
 export default function DashboardPage() {
   const { data: session, status } = useSession();

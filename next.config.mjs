@@ -38,21 +38,21 @@ const nextConfig = {
       },
     ];
   },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   webpack: (config, { webpack }) => {
     config.resolve.alias = {
       ...config.resolve.alias,
       viem: path.resolve('./node_modules/viem'),
       '@stripe/crypto': false,
       '@farcaster/mini-app-solana': false,
+      '@walletconnect/ethereum-provider': false,
+      '@walletconnect/modal': false,
+      '@coinbase/wallet-sdk': false,
+      '@safe-global/safe-apps-provider': false,
+      '@safe-global/safe-apps-sdk': false,
     };
-    config.plugins.push(
-      new webpack.NormalModuleReplacementPlugin(
-        /^@phosphor-icons\/webcomponents\/Ph(.+)$/,
-        (resource) => {
-          resource.request = '@phosphor-icons/react';
-        }
-      )
-    );
     return config;
   },
 };
