@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
-import { LayoutDashboard, Workflow, LogOut, BarChart2 } from 'lucide-react';
+import { LayoutDashboard, Workflow, LogOut, BarChart2, Presentation } from 'lucide-react';
 
 export default function Header() {
   const pathname = usePathname();
@@ -77,6 +77,18 @@ export default function Header() {
             >
               <BarChart2 className="h-4 w-4" />
               Why Arc
+            </Link>
+
+            <Link
+              href="/presentation"
+              className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors ${
+                pathname === '/presentation'
+                  ? 'bg-indigo-600/20 text-indigo-400 border border-indigo-500/30'
+                  : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+              }`}
+            >
+              <Presentation className="h-4 w-4" />
+              Presentation
             </Link>
           </nav>
         )}

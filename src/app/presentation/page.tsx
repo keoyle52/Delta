@@ -13,6 +13,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Play,
+  XCircle,
+  CheckCircle2,
 } from 'lucide-react';
 
 export default function PresentationPage() {
@@ -101,10 +103,10 @@ export default function PresentationPage() {
               </div>
               <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/60 backdrop-blur-xl">
                 <div className="text-teal-400 font-bold text-[11px] uppercase tracking-wider mb-1">
-                  3. Verify On-Chain
+                  3. Verify Onchain
                 </div>
                 <p className="text-xs text-slate-400">
-                  Live on-chain audit trail linking directly to ArcScan & Solana Devnet Explorer.
+                  Live onchain audit trail linking directly to ArcScan & Solana Devnet Explorer.
                 </p>
               </div>
             </div>
@@ -124,24 +126,26 @@ export default function PresentationPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="p-5 rounded-xl border border-red-500/20 bg-red-950/10 space-y-3">
                 <h3 className="text-base font-bold text-red-400 flex items-center gap-2">
-                  <span>❌</span> Web3 Pain Points
+                  <XCircle className="h-4 w-4 text-red-400" />
+                  <span>Web3 Friction Points</span>
                 </h3>
                 <ul className="space-y-2 text-xs text-slate-300 list-disc list-inside leading-relaxed">
                   <li>
-                    <strong className="text-white">Manual Friction:</strong> Swapping tokens, bridging cross-chain, and splitting revenues requires 5+ manual transactions.
+                    <strong className="text-white">Manual Complexity:</strong> Swapping tokens, bridging cross-chain, and splitting revenues requires manual, multi-step transactions across separate interfaces.
                   </li>
                   <li>
                     <strong className="text-white">No Event Triggers:</strong> Traditional Web3 wallets cannot react to incoming deposits automatically.
                   </li>
                   <li>
-                    <strong className="text-white">Fragmented Liquidity:</strong> Managing balances between EVM testnets and Solana is slow and complex.
+                    <strong className="text-white">Fragmented Workflows:</strong> Managing balance flows between testnets and destination chains lacks visual orchestration.
                   </li>
                 </ul>
               </div>
 
               <div className="p-5 rounded-xl border border-emerald-500/20 bg-emerald-950/10 space-y-3">
                 <h3 className="text-base font-bold text-emerald-400 flex items-center gap-2">
-                  <span>✅</span> The Delta Solution
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                  <span>The Delta Solution</span>
                 </h3>
                 <ul className="space-y-2 text-xs text-slate-300 list-disc list-inside leading-relaxed">
                   <li>
@@ -151,7 +155,7 @@ export default function PresentationPage() {
                     <strong className="text-white">Circle App Kit Integration:</strong> Automated CCTP bridging to Solana Devnet and instant DEX swaps.
                   </li>
                   <li>
-                    <strong className="text-white">Production Safety:</strong> Strict token filtering, txHash deduplication, and 120s cooldown guards.
+                    <strong className="text-white">Production Safety & Telemetry:</strong> Strict token filtering, txHash deduplication, and live onchain telemetry.
                   </li>
                 </ul>
               </div>
@@ -227,7 +231,7 @@ export default function PresentationPage() {
                   <span>Deduplication</span>
                 </div>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  Every transaction hash (`txHash`) is tracked in Neon DB to prevent duplicate event executions.
+                  Every transaction hash (`txHash`) is tracked in database storage to prevent duplicate event executions.
                 </p>
               </div>
 
@@ -237,14 +241,14 @@ export default function PresentationPage() {
                   <span>Loop Protection</span>
                 </div>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  Strict token filtering ignores EURC & adapter transfers, backed by a 120s workflow cooldown guard.
+                  Strict token filtering ignores internal adapter transfers, backed by a workflow cooldown guard.
                 </p>
               </div>
 
               <div className="p-5 rounded-xl border border-slate-800 bg-slate-900/60 space-y-2">
                 <div className="flex items-center gap-2 text-teal-400 font-bold text-xs">
                   <ExternalLink className="h-4 w-4" />
-                  <span>On-Chain Audit Trail</span>
+                  <span>Onchain Audit Trail</span>
                 </div>
                 <p className="text-xs text-slate-400 leading-relaxed">
                   Zero mock hashes. Every step links directly to live **ArcScan** & **Solana Explorer** receipts.
