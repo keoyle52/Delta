@@ -47,11 +47,6 @@ const nextConfig = {
       viem: path.resolve('./node_modules/viem'),
       '@stripe/crypto': false,
       '@farcaster/mini-app-solana': false,
-      '@walletconnect/ethereum-provider': false,
-      '@walletconnect/modal': false,
-      '@coinbase/wallet-sdk': false,
-      '@safe-global/safe-apps-provider': false,
-      '@safe-global/safe-apps-sdk': false,
     };
     return config;
   },
