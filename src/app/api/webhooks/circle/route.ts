@@ -164,18 +164,23 @@ export async function POST(req: NextRequest) {
           let triggeredCount = 0;
 
           for (const workflow of wallet.user.workflows) {
-            // FIX E: 120-SECOND WORKFLOW COOLDOWN GUARD (Prevents rapid loop re-triggers)
-            const recentExecution = await prisma.execution.findFirst({
+            // ACTIVE EXECUTION GUARD: Check if workflow currently has an active PENDING or RUNNING execution
+            // Replaces fixed 120s cooldown with real state check. Once COMPLETE/FAILED, workflow can immediately re-trigger.
+            // STALE_EXECUTION_TIMEOUT_MS (30m) acts as a safety valve in case of unhandled engine crashes.
+            const STALE_EXECUTION_TIMEOUT_MS = 30 * 60 * 1000;
+
+            const activeExecution = await prisma.execution.findFirst({
               where: {
                 workflowId: workflow.id,
-                startedAt: {
-                  gt: new Date(Date.now() - 120 * 1000), // 120 second cooldown guard
-                },
+                status: { in: ['PENDING', 'RUNNING'] },
+                startedAt: { gt: new Date(Date.now() - STALE_EXECUTION_TIMEOUT_MS) },
               },
             });
 
-            if (recentExecution) {
-              logger.debug(`[WEBHOOK] Workflow ${workflow.id} is on 120s cooldown. Skipping trigger.`);
+            if (activeExecution) {
+              logger.debug(
+                `[WEBHOOK] Workflow ${workflow.id} already has an active execution (${activeExecution.id}, status=${activeExecution.status}, started ${activeExecution.startedAt}). Skipping trigger until complete.`
+              );
               continue;
             }
 
