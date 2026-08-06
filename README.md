@@ -6,7 +6,7 @@ Delta is a visual node-based money-flow automation platform built for the **Circ
 
 ---
 
-## ⚡ Core Features
+## Core Features
 
 - **Privy Passwordless Authentication**: Seamless email OTP authentication powered by **Privy** (Circle/Arc ecosystem partner with 499 free MAU / 50k signatures / $1M volume free).
 - **Circle Custodial Developer-Controlled Wallets**: Automatic user wallet provisioning on **Arc Testnet (`"ARC-TESTNET"`)** bound to a single application-wide Wallet Set.
@@ -18,7 +18,7 @@ Delta is a visual node-based money-flow automation platform built for the **Circ
 
 ---
 
-## 🚀 Getting Started & Setup
+## Getting Started & Setup
 
 ### 1. Installation
 ```bash
@@ -62,7 +62,7 @@ npm run inngest:dev
 
 ---
 
-## 🏛️ Built on Arc Attribution Note & Simulation Mode
+## Built on Arc Attribution Note & Simulation Mode
 
 Delta is purpose-built for the **Circle Arc Hackathon**. All native gas fees and transaction settlements on Arc Testnet use **USDC** with sub-second deterministic finality.
 
@@ -70,7 +70,7 @@ Delta is purpose-built for the **Circle Arc Hackathon**. All native gas fees and
 
 ---
 
-## 🔒 Production Security Checklist
+## Production Security Checklist
 
 Before deploying Delta to production environments, complete the following security verifications:
 
@@ -85,8 +85,6 @@ Before deploying Delta to production environments, complete the following securi
 
 ---
 
-## 🛠️ Internal Development Scripts
+## Internal Development Scripts
 
 The `scripts/` directory contains internal setup and maintenance scripts (`create-wallet-set.ts`, `register-entity-secret-sdk.ts`, `clean-old-executions.ts`). These are internal developer tooling scripts and not part of the runtime web application bundle.
-
-
