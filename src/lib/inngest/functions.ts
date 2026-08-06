@@ -27,6 +27,90 @@ function evaluateCondition(triggerAmount: number | string, field: string, operat
   }
 }
 
+interface AncestryCheckResult {
+  active: boolean;
+  reason?: string;
+}
+
+/**
+ * Transitive Ancestry & Condition Branch Gating Check
+ * Recursively traces back all incoming paths from targetNodeId to trigger.
+ * If all incoming paths pass through an inactive condition branch or skipped parent, returns active: false.
+ */
+function checkNodeAncestry(
+  targetNodeId: string,
+  nodes: any[],
+  edges: any[],
+  triggerAmount: number | string,
+  visited = new Set<string>()
+): AncestryCheckResult {
+  if (visited.has(targetNodeId)) {
+    return { active: true };
+  }
+  visited.add(targetNodeId);
+
+  const targetNode = nodes.find((n: any) => n.id === targetNodeId);
+  if (!targetNode || targetNode.type === 'trigger') {
+    return { active: true };
+  }
+
+  const incomingEdges = edges.filter((e: any) => e.target === targetNodeId);
+  if (incomingEdges.length === 0) {
+    return { active: true };
+  }
+
+  let anyPathActive = false;
+  let lastInactivityReason = '';
+
+  for (const edge of incomingEdges) {
+    const parentNode = nodes.find((n: any) => n.id === edge.source);
+    if (!parentNode) continue;
+
+    if (parentNode.type === 'condition') {
+      const field = parentNode.data?.field || 'triggerAmount';
+      const operator = parentNode.data?.operator || '>';
+      const targetValue = parentNode.data?.value || '10';
+      const isConditionMet = evaluateCondition(triggerAmount, field, operator, targetValue);
+
+      const requiredHandle = edge.sourceHandle || 'true';
+      const branchMatches =
+        (isConditionMet && requiredHandle === 'true') || (!isConditionMet && requiredHandle === 'false');
+
+      if (!branchMatches) {
+        lastInactivityReason = `Branch skipped: condition (${field} ${operator} ${targetValue} USDC) evaluated to ${
+          isConditionMet ? 'TRUE' : 'FALSE'
+        } but node is on '${requiredHandle}' branch`;
+        continue;
+      }
+
+      const parentAncestry = checkNodeAncestry(parentNode.id, nodes, edges, triggerAmount, new Set(visited));
+      if (parentAncestry.active) {
+        anyPathActive = true;
+        break;
+      } else {
+        lastInactivityReason = parentAncestry.reason || 'Parent condition path is inactive';
+      }
+    } else {
+      const parentAncestry = checkNodeAncestry(parentNode.id, nodes, edges, triggerAmount, new Set(visited));
+      if (parentAncestry.active) {
+        anyPathActive = true;
+        break;
+      } else {
+        lastInactivityReason = parentAncestry.reason || `Upstream node (${parentNode.type}) is on an inactive branch`;
+      }
+    }
+  }
+
+  if (anyPathActive) {
+    return { active: true };
+  }
+
+  return {
+    active: false,
+    reason: lastInactivityReason || 'All incoming paths to this node are inactive',
+  };
+}
+
 /**
  * Inngest Durable Workflow Execution Function
  */
@@ -188,34 +272,19 @@ export const executeWorkflowFunction = inngest.createFunction(
           return;
         }
 
-        // Check if node is gated by an incoming edge from a Condition Node
+        // Transitive Ancestry & Condition Branch Gating Check
         const edges = typeof workflow.edges === 'string' ? JSON.parse(workflow.edges) : (workflow.edges || []);
-        const incomingConditionEdge = edges.find((e: any) => {
-          if (e.target !== node.id) return false;
-          const sourceNode = nodes.find((n: any) => n.id === e.source);
-          return sourceNode?.type === 'condition';
-        });
+        const ancestryCheck = checkNodeAncestry(node.id, nodes, edges, triggerAmount);
 
-        if (incomingConditionEdge) {
-          const conditionNode = nodes.find((n: any) => n.id === incomingConditionEdge.source);
-          const field = conditionNode?.data?.field || 'triggerAmount';
-          const operator = conditionNode?.data?.operator || '>';
-          const targetValue = conditionNode?.data?.value || '10';
-          const isConditionMet = evaluateCondition(triggerAmount, field, operator, targetValue);
-
-          const requiredHandle = incomingConditionEdge.sourceHandle || 'true';
-          const branchMatches = (isConditionMet && requiredHandle === 'true') || (!isConditionMet && requiredHandle === 'false');
-
-          if (!branchMatches) {
-            await updateLog({
-              stepId: node.id,
-              nodeType: node.type,
-              nodeName: nodeData.label || node.type.toUpperCase(),
-              status: 'SKIPPED',
-              details: `Condition not met: Inbound amount (${triggerAmount} USDC) is not ${operator} ${targetValue} USDC (Required handle: ${requiredHandle})`,
-            });
-            return;
-          }
+        if (!ancestryCheck.active) {
+          await updateLog({
+            stepId: node.id,
+            nodeType: node.type,
+            nodeName: nodeData.label || node.type.toUpperCase(),
+            status: 'SKIPPED',
+            details: ancestryCheck.reason || 'Node is on an inactive condition branch',
+          });
+          return;
         }
 
         if (parseFloat(actionAmount) <= 0) {
