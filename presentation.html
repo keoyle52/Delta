@@ -32,11 +32,11 @@
     <!-- SLIDE 1: HERO & COVER -->
     <section id="slide-1" className="slide active w-full text-center space-y-8">
       <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-indigo-500/30 bg-indigo-950/40 text-xs font-bold text-indigo-300 uppercase tracking-widest mx-auto">
-        ⚡ Hackathon Official Pitch Deck
+        ✨ Hackathon Official Pitch Deck
       </div>
       <div className="space-y-4">
         <h1 className="text-5xl md:text-7xl font-black tracking-tight text-white font-sans">
-          delta <span className="bg-gradient-to-r from-indigo-400 via-purple-400 to-teal-400 bg-clip-text text-transparent">(FlowMX)</span>
+          delta
         </h1>
         <p className="text-xl md:text-2xl text-slate-300 max-w-3xl mx-auto font-medium leading-relaxed">
           Autonomous Visual Workflow Automation Engine Built on Arc Testnet & Circle App Kit
@@ -45,16 +45,16 @@
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-3xl mx-auto pt-6 text-left">
         <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/60">
-          <div className="text-indigo-400 font-bold text-sm uppercase tracking-wider mb-1">Trigger</div>
-          <p className="text-xs text-slate-400">Captures incoming USDC deposits on Arc Testnet in real time.</p>
+          <div className="text-indigo-400 font-bold text-sm uppercase tracking-wider mb-1">1. Capture Deposit</div>
+          <p className="text-xs text-slate-400">Captures incoming USDC deposits on Arc Testnet in real time via Circle Webhooks.</p>
         </div>
         <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/60">
-          <div className="text-purple-400 font-bold text-sm uppercase tracking-wider mb-1">Automate</div>
-          <p className="text-xs text-slate-400">Instant token swaps (USDC → EURC) & multi-chain CCTP bridges.</p>
+          <div className="text-purple-400 font-bold text-sm uppercase tracking-wider mb-1">2. Automate Pipeline</div>
+          <p className="text-xs text-slate-400">Executes instant token swaps (USDC → EURC) & cross-chain CCTP bridges to Base Sepolia or Solana.</p>
         </div>
         <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/60">
-          <div className="text-teal-400 font-bold text-sm uppercase tracking-wider mb-1">Verify</div>
-          <p className="text-xs text-slate-400">Live onchain audit trail via ArcScan & Solana Devnet Explorer.</p>
+          <div className="text-teal-400 font-bold text-sm uppercase tracking-wider mb-1">3. Verify Onchain</div>
+          <p className="text-xs text-slate-400">Live onchain audit trail linking directly to ArcScan & block explorers.</p>
         </div>
       </div>
     </section>
@@ -62,30 +62,36 @@
     <!-- SLIDE 2: PROBLEM & SOLUTION -->
     <section id="slide-2" className="slide w-full space-y-8">
       <div className="text-center space-y-2">
-        <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest">Problem vs Solution</span>
-        <h2 className="text-3xl md:text-4xl font-bold text-white">Why Web3 Automation Needs Delta</h2>
+        <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest">Problem & Solution</span>
+        <h2 className="text-3xl md:text-4xl font-bold text-white">Why Web3 Needs Delta</h2>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         <div className="p-6 rounded-2xl border border-red-500/20 bg-red-950/10 space-y-4">
           <h3 className="text-xl font-bold text-red-400 flex items-center gap-2">
-            <span>❌</span> Current Web3 Pain Points
+            <svg className="w-5 h-5 text-red-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <span>Web3 Friction Points</span>
           </h3>
           <ul className="space-y-3 text-sm text-slate-300 list-disc list-inside">
-            <li><strong className="text-white">Manual Steps:</strong> Receiving funds, swapping tokens, and bridging cross-chain requires 5+ manual transactions.</li>
-            <li><strong className="text-white">No Event Triggers:</strong> Standard Web3 wallets cannot react to incoming transactions automatically.</li>
-            <li><strong className="text-white">Fragmented Liquidity:</strong> Managing multi-chain balances between EVM testnets and Solana is tedious.</li>
+            <li><strong className="text-white">Manual Complexity:</strong> Swapping tokens, bridging cross-chain, and splitting revenues requires manual, multi-step transactions across separate interfaces.</li>
+            <li><strong className="text-white">No Event Triggers:</strong> Traditional Web3 wallets cannot react to incoming deposits automatically.</li>
+            <li><strong className="text-white">Fragmented Workflows:</strong> Managing balance flows between testnets and destination chains lacks visual orchestration.</li>
           </ul>
         </div>
 
         <div className="p-6 rounded-2xl border border-emerald-500/20 bg-emerald-950/10 space-y-4">
           <h3 className="text-xl font-bold text-emerald-400 flex items-center gap-2">
-            <span>✅</span> The Delta Solution
+            <svg className="w-5 h-5 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <span>The Delta Solution</span>
           </h3>
           <ul className="space-y-3 text-sm text-slate-300 list-disc list-inside">
             <li><strong className="text-white">Visual Canvas Engine:</strong> Drag-and-drop node pipelines (Trigger → Swap → Bridge → Send → Alert).</li>
-            <li><strong className="text-white">Circle App Kit Integration:</strong> Automated CCTP bridging to Solana Devnet and instant DEX swaps.</li>
-            <li><strong className="text-white">Durable Durability:</strong> Circle ECDSA v2 Webhooks + Inngest engine for zero data loss.</li>
+            <li><strong className="text-white">Circle App Kit Integration:</strong> Automated CCTP bridging to Base Sepolia / Solana Devnet and instant DEX swaps.</li>
+            <li><strong className="text-white">Production Safety & Telemetry:</strong> Strict token filtering, txHash deduplication, and live onchain telemetry.</li>
           </ul>
         </div>
       </div>
@@ -94,19 +100,19 @@
     <!-- SLIDE 3: ARCHITECTURE & TECH STACK -->
     <section id="slide-3" className="slide w-full space-y-8">
       <div className="text-center space-y-2">
-        <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest">Architecture</span>
+        <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest">Technical Architecture</span>
         <h2 className="text-3xl md:text-4xl font-bold text-white">End-to-End System Flow</h2>
       </div>
 
       <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/80 space-y-4 text-center font-mono text-sm text-slate-300">
         <div className="flex flex-wrap items-center justify-center gap-3">
-          <span className="p-3 rounded-xl bg-slate-950 border border-indigo-500/30 text-indigo-300 font-bold">1. Inbound USDC</span>
+          <span className="p-3 rounded-xl bg-slate-950 border border-indigo-500/30 text-indigo-300 font-bold">1. Inbound USDC Deposit</span>
           <span>➔</span>
-          <span className="p-3 rounded-xl bg-slate-950 border border-purple-500/30 text-purple-300 font-bold">2. Circle Webhook (v2)</span>
+          <span className="p-3 rounded-xl bg-slate-950 border border-purple-500/30 text-purple-300 font-bold">2. Circle Webhook (ECDSA v2)</span>
           <span>➔</span>
           <span className="p-3 rounded-xl bg-slate-950 border border-teal-500/30 text-teal-300 font-bold">3. BFS Graph Engine</span>
           <span>➔</span>
-          <span className="p-3 rounded-xl bg-slate-950 border border-amber-500/30 text-amber-300 font-bold">4. App Kit Swap / Bridge</span>
+          <span className="p-3 rounded-xl bg-slate-950 border border-amber-500/30 text-amber-300 font-bold">4. App Kit Swap / CCTP Bridge</span>
         </div>
       </div>
 
@@ -121,11 +127,11 @@
         </div>
         <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/40">
           <div className="text-slate-400 font-bold uppercase mb-1">Bridge</div>
-          <div className="text-white font-semibold">CCTP Solana Devnet</div>
+          <div className="text-white font-semibold">CCTP Base Sepolia / Solana</div>
         </div>
         <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/40">
-          <div className="text-slate-400 font-bold uppercase mb-1">Notifications</div>
-          <div className="text-white font-semibold">Resend Email SDK</div>
+          <div className="text-slate-400 font-bold uppercase mb-1">Alerts</div>
+          <div className="text-white font-semibold">Discord Webhook</div>
         </div>
       </div>
     </section>
@@ -133,27 +139,27 @@
     <!-- SLIDE 4: KEY HIGHLIGHTS & PROTECTION -->
     <section id="slide-4" className="slide w-full space-y-8">
       <div className="text-center space-y-2">
-        <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest">Platform Integrity</span>
-        <h2 className="text-3xl md:text-4xl font-bold text-white">Production-Ready Safety & Auditability</h2>
+        <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest">Safety & Verification</span>
+        <h2 className="text-3xl md:text-4xl font-bold text-white">Production Safety & Auditability</h2>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/60 space-y-2">
-          <h4 className="text-indigo-400 font-bold">🔒 Strict Deduplication</h4>
+          <h4 className="text-indigo-400 font-bold">🔒 Deduplication</h4>
           <p className="text-xs text-slate-400 leading-relaxed">
-            Every transaction hash (`txHash`) is tracked in Neon DB to prevent duplicate event executions.
+            Every transaction hash (`txHash`) is tracked in database storage to prevent duplicate event executions.
           </p>
         </div>
         <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/60 space-y-2">
           <h4 className="text-purple-400 font-bold">🛡️ Loop Protection</h4>
           <p className="text-xs text-slate-400 leading-relaxed">
-            Automatic filtering rejects internal adapter and EURC swap transfers, backed by a 120s workflow cooldown guard.
+            Strict token filtering ignores internal adapter transfers, backed by a workflow cooldown guard.
           </p>
         </div>
         <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/60 space-y-2">
-          <h4 className="text-teal-400 font-bold">🔍 Live Onchain Hashes</h4>
+          <h4 className="text-teal-400 font-bold">🔍 Onchain Audit Trail</h4>
           <p className="text-xs text-slate-400 leading-relaxed">
-            Zero mock hashes. Every execution links directly to live **ArcScan** & **Solana Explorer** receipts.
+            Zero mock hashes. Every step links directly to live ArcScan & block explorer receipts.
           </p>
         </div>
       </div>
@@ -169,7 +175,7 @@
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto text-left">
         <div className="p-6 rounded-2xl border border-indigo-500/20 bg-indigo-950/20">
           <div className="text-indigo-400 font-bold text-sm mb-1">Phase 1: Multi-Token Triggers</div>
-          <p className="text-xs text-slate-400">Expand inbound trigger triggers to EURC, cirBTC, and USDT tokens.</p>
+          <p className="text-xs text-slate-400">Expand inbound triggers to EURC, cirBTC, and USDT tokens.</p>
         </div>
         <div className="p-6 rounded-2xl border border-purple-500/20 bg-purple-950/20">
           <div className="text-purple-400 font-bold text-sm mb-1">Phase 2: AI Rebalancing</div>

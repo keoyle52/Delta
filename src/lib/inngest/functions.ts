@@ -125,8 +125,11 @@ export const executeWorkflowFunction = inngest.createFunction(
 
           // Real fee calculation for on-chain non-simulated complete transactions
           let feePaidUsdc: number | null = rawLogEntry.feePaidUsdc !== undefined ? rawLogEntry.feePaidUsdc : null;
-          if (!event.data?.isSimulated && isFinalStatus && logEntry.txHash && feePaidUsdc === null) {
-            feePaidUsdc = await getTxFeePaidUsdc(logEntry.txHash);
+          if (!event.data?.isSimulated && isFinalStatus && feePaidUsdc === null) {
+            const hashForFee = logEntry.nodeType === 'bridge' ? (logEntry.arcBurnTxHash || logEntry.txHash) : logEntry.txHash;
+            if (hashForFee) {
+              feePaidUsdc = await getTxFeePaidUsdc(hashForFee);
+            }
           }
 
           const existingIndex = logs.findIndex(
@@ -484,6 +487,7 @@ export const executeWorkflowFunction = inngest.createFunction(
                 nodeName: nodeData.label || 'CCTP Bridge Action',
                 status: 'COMPLETE',
                 txHash: mintTxHash,
+                arcBurnTxHash: realTxHash,
                 destinationChain,
                 details: `Bridged ${finalAmountStr} USDC via CCTP to ${destinationChain} recipient: ${destinationAddress}`,
               });

@@ -74,10 +74,7 @@ export default function PresentationPage() {
 
             <div className="space-y-3">
               <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white font-sans">
-                delta{' '}
-                <span className="bg-gradient-to-r from-indigo-400 via-purple-400 to-teal-400 bg-clip-text text-transparent">
-                  (FlowMX)
-                </span>
+                delta
               </h1>
               <p className="text-lg md:text-xl text-slate-300 max-w-2xl mx-auto font-medium leading-relaxed">
                 Autonomous Visual Workflow Automation Engine Built on Arc Testnet & Circle App Kit
@@ -98,7 +95,7 @@ export default function PresentationPage() {
                   2. Automate Pipeline
                 </div>
                 <p className="text-xs text-slate-400">
-                  Executes instant token swaps (USDC → EURC) & cross-chain CCTP bridges to Solana.
+                  Executes instant token swaps (USDC → EURC) & cross-chain CCTP bridges to Base Sepolia or Solana.
                 </p>
               </div>
               <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/60 backdrop-blur-xl">
@@ -106,7 +103,7 @@ export default function PresentationPage() {
                   3. Verify Onchain
                 </div>
                 <p className="text-xs text-slate-400">
-                  Live onchain audit trail linking directly to ArcScan & Solana Devnet Explorer.
+                  Live onchain audit trail linking directly to ArcScan & block explorers.
                 </p>
               </div>
             </div>
@@ -152,7 +149,7 @@ export default function PresentationPage() {
                     <strong className="text-white">Visual Canvas Engine:</strong> Drag-and-drop node pipelines (Trigger → Swap → Bridge → Send → Alert).
                   </li>
                   <li>
-                    <strong className="text-white">Circle App Kit Integration:</strong> Automated CCTP bridging to Solana Devnet and instant DEX swaps.
+                    <strong className="text-white">Circle App Kit Integration:</strong> Automated CCTP bridging to Base Sepolia / Solana Devnet and instant DEX swaps.
                   </li>
                   <li>
                     <strong className="text-white">Production Safety & Telemetry:</strong> Strict token filtering, txHash deduplication, and live onchain telemetry.
@@ -204,11 +201,11 @@ export default function PresentationPage() {
               </div>
               <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/40">
                 <div className="text-slate-500 font-bold uppercase text-[10px] mb-0.5">Bridge</div>
-                <div className="text-white font-semibold">CCTP Solana Devnet</div>
+                <div className="text-white font-semibold">CCTP Base Sepolia / Solana</div>
               </div>
               <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/40">
                 <div className="text-slate-500 font-bold uppercase text-[10px] mb-0.5">Alerts</div>
-                <div className="text-white font-semibold">Resend Email SDK</div>
+                <div className="text-white font-semibold">Discord Webhook</div>
               </div>
             </div>
           </div>
@@ -251,7 +248,7 @@ export default function PresentationPage() {
                   <span>Onchain Audit Trail</span>
                 </div>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  Zero mock hashes. Every step links directly to live **ArcScan** & **Solana Explorer** receipts.
+                  Zero mock hashes. Every step links directly to live ArcScan & block explorer receipts.
                 </p>
               </div>
             </div>
