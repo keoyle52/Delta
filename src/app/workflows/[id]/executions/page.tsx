@@ -46,6 +46,7 @@ export default function ExecutionsPage({ params }: { params: Promise<{ id: strin
     fetchExecutions();
     const interval = setInterval(fetchExecutions, 5000);
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchExecutions is intentionally omitted to prevent re-creating the 5s polling interval on each render cycle.
   }, [workflowId]);
 
   const handleTestTrigger = async () => {

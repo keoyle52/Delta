@@ -49,5 +49,5 @@ jobs:
           NEXT_PUBLIC_ARC_RPC_URL: "https://rpc.mainnet.arc.io"
           NEXT_PUBLIC_USDC_ADDRESS: "0x3600000000000000000000000000000000000000"
           DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/deltadb?sslmode=require"
-          NEXTAUTH_SECRET: "ci-dummy-secret-ci-dummy-secret-32"
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET || 'ci_build_dummy_placeholder' }}
           NEXTAUTH_URL: "http://localhost:3000"

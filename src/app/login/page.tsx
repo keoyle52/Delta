@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { usePrivy } from '@privy-io/react-auth';
 import { Zap, ArrowRight, RefreshCw, ShieldCheck, Lock, PlayCircle } from 'lucide-react';
 
@@ -95,7 +96,7 @@ export default function LoginPage() {
         <div className="text-center space-y-3">
           <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 via-purple-600 to-teal-500 p-0.5 shadow-lg shadow-indigo-500/20 mb-2">
             <div className="flex h-full w-full items-center justify-center rounded-[14px] bg-slate-950 p-2">
-              <img src="/icon.svg" alt="Delta Logo" className="h-full w-full object-contain" />
+              <Image src="/icon.svg" alt="Delta Logo" width={32} height={32} className="h-full w-full object-contain" />
             </div>
           </div>
           <h1 className="text-3xl font-bold tracking-tight text-white font-sans">delta</h1>

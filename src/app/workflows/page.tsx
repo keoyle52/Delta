@@ -29,6 +29,7 @@ export default function WorkflowsPage() {
 
   useEffect(() => {
     fetchWorkflows();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchWorkflows is intentionally omitted to prevent re-fetch loops on component re-render; workflow loading is strictly keyed to network transitions.
   }, [network]);
 
   const handleCreateFromTemplate = async (templateObj?: any) => {

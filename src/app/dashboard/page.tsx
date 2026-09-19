@@ -129,6 +129,7 @@ export default function DashboardPage() {
     if (session?.user) {
       fetchWalletAndBalances();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally omitted to prevent re-render fetch loops; balance refresh is strictly keyed to session and network changes
   }, [session, network]);
 
   const copyAddress = () => {

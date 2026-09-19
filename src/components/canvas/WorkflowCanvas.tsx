@@ -140,6 +140,7 @@ function InnerWorkflowCanvas({
     if (historyRef.current.length === 0) {
       saveHistory(nodes, edges);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally runs only once on mount to establish the baseline undo/redo history state without triggering on every canvas node/edge mutation.
   }, []);
 
   const handleUndo = useCallback(() => {
