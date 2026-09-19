@@ -45,9 +45,9 @@ jobs:
       - name: Next.js Production Build
         run: npm run build
         env:
-          NEXT_PUBLIC_ARC_CHAIN_ID: "5042002"
-          NEXT_PUBLIC_ARC_RPC_URL: "https://rpc.arc.network"
-          NEXT_PUBLIC_USDC_ADDRESS: "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d"
+          NEXT_PUBLIC_ARC_CHAIN_ID: "5042"
+          NEXT_PUBLIC_ARC_RPC_URL: "https://rpc.mainnet.arc.io"
+          NEXT_PUBLIC_USDC_ADDRESS: "0x3600000000000000000000000000000000000000"
           DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/deltadb?sslmode=require"
           NEXTAUTH_SECRET: "ci-dummy-secret-ci-dummy-secret-32"
           NEXTAUTH_URL: "http://localhost:3000"

@@ -1,6 +1,6 @@
 # Security Policy
 
-Delta is a non-custodial and developer-controlled financial application operating on **Arc Mainnet** (Chain ID: `5042002`), facilitating real native USDC and EURC transactions, swaps, and cross-chain transfers via Circle CCTP. Because Delta handles real funds, security is our highest priority.
+Delta is a non-custodial and developer-controlled financial application operating on **Arc Mainnet** (Chain ID: `5042`), facilitating real native USDC and EURC transactions, swaps, and cross-chain transfers via Circle CCTP. Because Delta handles real funds, security is our highest priority.
 
 ---
 
@@ -12,12 +12,12 @@ The following components are within the security scope:
 | :--- | :--- | :--- |
 | **Delta Web Application** | Supported | Production deployment at [delta-omega-black.vercel.app](https://delta-omega-black.vercel.app) |
 | **API Endpoints** | Supported | All Next.js route handlers under `/api/*` |
-| **Arc Mainnet Integration** | Supported | RPC integration (`https://rpc.arc.network`), Chain ID `5042002`, gas settings (18 decimals native USDC) |
+| **Arc Mainnet Integration** | Supported | RPC integration (`https://rpc.mainnet.arc.io`), Chain ID `5042`, gas settings (18 decimals native USDC) |
 | **Circle App Kit & Wallets** | Supported | Developer-controlled and user-controlled wallet integrations via Circle SDK |
 | **Smart Contract Interaction** | Supported | CCTP TokenMessenger, USDC, and EURC contract calls on Arc Mainnet |
 
 ### Out of Scope
-- Testnet environments (Arc Testnet `5042001`) unless the issue directly impacts Mainnet security.
+- Testnet environments (Arc Testnet `5042002`) unless the issue directly impacts Mainnet security.
 - Vulnerabilities in third-party RPC providers, Infura/Alchemy nodes, or external blockchain networks outside Delta's control.
 - Denial of Service (DoS) attacks targeting third-party cloud infrastructure (e.g., Vercel, Neon, Circle API) without a Delta-specific exploit.
 - Social engineering, phishing attacks targeting end-users, or attacks requiring physical access to a user's device.
@@ -60,7 +60,7 @@ If you discover a security vulnerability within Delta, please report it responsi
 Delta implements defensive controls across all layers of the application:
 
 1. **Network Isolation & Chain Verification**:
-   - Strict chain ID validation (`5042002` for Arc Mainnet).
+   - Strict chain ID validation (`5042` for Arc Mainnet, `5042002` for Arc Testnet).
    - Dynamic network configuration (`src/config/network.ts`) ensuring production environments never route funds or transactions to testnet endpoints or contract addresses.
 2. **Transaction Idempotency**:
    - Every financial transaction and wallet execution utilizes cryptographic idempotency keys (`src/lib/idempotency.ts`) to prevent replay attacks and duplicate transfers.
