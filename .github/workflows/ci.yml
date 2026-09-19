@@ -1,0 +1,53 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-verify:
+    name: Build, Typecheck & Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: TypeScript Typecheck
+        run: npx tsc --noEmit
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Run Tests
+        run: |
+          echo "Notice: Delta currently has no automated test runner (Jest/Vitest) configured in package.json."
+          echo "Automated end-to-end and functional verification is conducted via scripts/verify-*.ts against Arc Mainnet."
+
+      - name: Next.js Production Build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_ARC_CHAIN_ID: "5042002"
+          NEXT_PUBLIC_ARC_RPC_URL: "https://rpc.arc.network"
+          NEXT_PUBLIC_USDC_ADDRESS: "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d"
+          DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/deltadb?sslmode=require"
+          NEXTAUTH_SECRET: "ci-dummy-secret-ci-dummy-secret-32"
+          NEXTAUTH_URL: "http://localhost:3000"
