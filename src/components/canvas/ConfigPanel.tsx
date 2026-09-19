@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Trash2, Settings, AlertCircle, AlertTriangle } from 'lucide-react';
 import { isValidEvmAddress, isValidSolanaAddress } from '@/lib/validation/address';
+import { useNetwork } from '@/context/NetworkContext';
 
 interface ConfigPanelProps {
   selectedNode: any;
@@ -12,6 +13,7 @@ interface ConfigPanelProps {
 
 export default function ConfigPanel({ selectedNode, onUpdateNode, onDeleteNode }: ConfigPanelProps) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const { isMainnet } = useNetwork();
 
   if (!selectedNode) {
     return (
@@ -159,7 +161,9 @@ export default function ConfigPanel({ selectedNode, onUpdateNode, onDeleteNode }
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-slate-300">Target Token (Arc Testnet)</label>
+              <label className="text-xs font-medium text-slate-300">
+                Target Token (Arc {isMainnet ? 'Mainnet' : 'Testnet'})
+              </label>
               <select
                 value={data.tokenOut || 'EURC'}
                 onChange={(e) => handleChange('tokenOut', e.target.value)}
@@ -190,21 +194,35 @@ export default function ConfigPanel({ selectedNode, onUpdateNode, onDeleteNode }
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-slate-300">Target Destination Chain</label>
               <select
-                value={data.destinationChain || 'Base_Sepolia'}
+                value={data.destinationChain || (isMainnet ? 'Base' : 'Base_Sepolia')}
                 onChange={(e) => handleChange('destinationChain', e.target.value)}
                 className="w-full rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
               >
-                <option value="Base_Sepolia">Base Sepolia (Base_Sepolia)</option>
-                <option value="Solana_Devnet">Solana Devnet (Solana_Devnet)</option>
-                <option value="Arbitrum_Sepolia">Arbitrum Sepolia (Arbitrum_Sepolia)</option>
-                <option value="Avalanche_Fuji">Avalanche Fuji (Avalanche_Fuji)</option>
-                <option value="Ethereum_Sepolia">Ethereum Sepolia (Ethereum_Sepolia)</option>
-                <option value="Optimism_Sepolia">OP Sepolia (Optimism_Sepolia)</option>
-                <option value="Polygon_Amoy_Testnet">Polygon PoS Amoy (Polygon_Amoy_Testnet)</option>
-                <option value="Sei_Testnet">Sei Testnet (Sei_Testnet)</option>
-                <option value="Sonic_Testnet">Sonic Testnet (Sonic_Testnet)</option>
-                <option value="Unichain_Sepolia">Unichain Sepolia (Unichain_Sepolia)</option>
-                <option value="World_Chain_Sepolia">World Chain Sepolia (World_Chain_Sepolia)</option>
+                {isMainnet ? (
+                  <>
+                    <option value="Base">Base</option>
+                    <option value="Solana">Solana</option>
+                    <option value="Arbitrum">Arbitrum</option>
+                    <option value="Ethereum">Ethereum</option>
+                    <option value="Optimism">Optimism</option>
+                    <option value="Avalanche">Avalanche</option>
+                    <option value="Polygon">Polygon</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="Base_Sepolia">Base Sepolia (Base_Sepolia)</option>
+                    <option value="Solana_Devnet">Solana Devnet (Solana_Devnet)</option>
+                    <option value="Arbitrum_Sepolia">Arbitrum Sepolia (Arbitrum_Sepolia)</option>
+                    <option value="Avalanche_Fuji">Avalanche Fuji (Avalanche_Fuji)</option>
+                    <option value="Ethereum_Sepolia">Ethereum Sepolia (Ethereum_Sepolia)</option>
+                    <option value="Optimism_Sepolia">OP Sepolia (Optimism_Sepolia)</option>
+                    <option value="Polygon_Amoy_Testnet">Polygon PoS Amoy (Polygon_Amoy_Testnet)</option>
+                    <option value="Sei_Testnet">Sei Testnet (Sei_Testnet)</option>
+                    <option value="Sonic_Testnet">Sonic Testnet (Sonic_Testnet)</option>
+                    <option value="Unichain_Sepolia">Unichain Sepolia (Unichain_Sepolia)</option>
+                    <option value="World_Chain_Sepolia">World Chain Sepolia (World_Chain_Sepolia)</option>
+                  </>
+                )}
               </select>
             </div>
 
@@ -212,7 +230,8 @@ export default function ConfigPanel({ selectedNode, onUpdateNode, onDeleteNode }
               <div className="flex items-center justify-between">
                 <label className="text-xs font-medium text-slate-300">Destination Recipient Address</label>
                 {data.destinationAddress && !(
-                  (data.destinationChain || 'Base_Sepolia') === 'Solana_Devnet'
+                  ((data.destinationChain || (isMainnet ? 'Base' : 'Base_Sepolia')) === 'Solana' ||
+                   (data.destinationChain || (isMainnet ? 'Base' : 'Base_Sepolia')) === 'Solana_Devnet')
                     ? isValidSolanaAddress(data.destinationAddress)
                     : isValidEvmAddress(data.destinationAddress)
                 ) && (
@@ -224,7 +243,8 @@ export default function ConfigPanel({ selectedNode, onUpdateNode, onDeleteNode }
               <input
                 type="text"
                 placeholder={
-                  (data.destinationChain || 'Base_Sepolia') === 'Solana_Devnet'
+                  ((data.destinationChain || (isMainnet ? 'Base' : 'Base_Sepolia')) === 'Solana' ||
+                   (data.destinationChain || (isMainnet ? 'Base' : 'Base_Sepolia')) === 'Solana_Devnet')
                     ? 'e.g. 7xKXtg2CW87d97TXJ...'
                     : 'e.g. 0x742d35Cc6634C0532925a3b844Bc454e4438f44e'
                 }
@@ -232,7 +252,8 @@ export default function ConfigPanel({ selectedNode, onUpdateNode, onDeleteNode }
                 onChange={(e) => handleChange('destinationAddress', e.target.value)}
                 className={`w-full rounded-lg border px-3 py-2 text-sm text-slate-200 focus:outline-none font-mono text-xs ${
                   data.destinationAddress && !(
-                    (data.destinationChain || 'Base_Sepolia') === 'Solana_Devnet'
+                    ((data.destinationChain || (isMainnet ? 'Base' : 'Base_Sepolia')) === 'Solana' ||
+                     (data.destinationChain || (isMainnet ? 'Base' : 'Base_Sepolia')) === 'Solana_Devnet')
                       ? isValidSolanaAddress(data.destinationAddress)
                       : isValidEvmAddress(data.destinationAddress)
                   )

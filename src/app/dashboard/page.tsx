@@ -1,50 +1,77 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   Wallet,
-  ExternalLink,
+  Zap,
+  TrendingUp,
+  ArrowRight,
+  Plus,
+  RefreshCw,
   Copy,
   Check,
-  RefreshCw,
-  Plus,
-  Zap,
-  ArrowRight,
-  Activity,
+  ExternalLink,
   Coins,
   ArrowUpRight,
-  X,
-  AlertCircle,
-  CheckCircle2,
   Clock,
-  TrendingUp,
+  CheckCircle2,
+  AlertCircle,
+  Play,
 } from 'lucide-react';
-import { ARC_TARGET_FEE_USD } from '@/lib/arc-advantage-constants';
+import { useNetwork } from '@/context/NetworkContext';
+
+interface WalletInfo {
+  address: string;
+  usdc: string;
+  formattedUsdc: string;
+  eurc: string;
+  formattedEurc: string;
+  blockchain: string;
+  network?: string;
+  chainId?: number;
+  activeProviders?: string[];
+  isSimulated?: boolean;
+}
+
+interface WorkflowItem {
+  id: string;
+  name: string;
+  isActive: boolean;
+  network?: string;
+  updatedAt: string;
+  _count?: {
+    executions: number;
+  };
+}
 
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const { network, isMainnet, config } = useNetwork();
 
-  const [walletInfo, setWalletInfo] = useState<any>(null);
-  const [loadingBalances, setLoadingBalances] = useState(true);
+  const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
+  const [workflows, setWorkflows] = useState<WorkflowItem[]>([]);
+  const [arcAdvantageStats, setArcAdvantageStats] = useState<any>(null);
+  const [loadingBalances, setLoadingBalances] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [workflows, setWorkflows] = useState<any[]>([]);
-  const [arcAdvantageStats, setArcAdvantageStats] = useState<{
-    avgCompletionTimeSeconds: number | null;
-    totalRealExecutions: number;
-  } | null>(null);
+  const [simulatingDeposit, setSimulatingDeposit] = useState(false);
 
-  // Withdraw Modal State
+  // Withdrawal Modal State
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [withdrawAddress, setWithdrawAddress] = useState('');
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawToken, setWithdrawToken] = useState<'USDC' | 'EURC'>('USDC');
   const [withdrawing, setWithdrawing] = useState(false);
-  const [withdrawResult, setWithdrawResult] = useState<any>(null);
-  const [simulatingDeposit, setSimulatingDeposit] = useState(false);
+  const [withdrawResult, setWithdrawResult] = useState<{
+    success: boolean;
+    message?: string;
+    txHash?: string;
+    explorerUrl?: string | null;
+    error?: string;
+  } | null>(null);
 
   const handleSimulateDeposit = async () => {
     try {
@@ -74,13 +101,13 @@ export default function DashboardPage() {
   const fetchWalletAndBalances = async () => {
     setLoadingBalances(true);
     try {
-      const res = await fetch('/api/wallet/balance');
+      const res = await fetch(`/api/wallet/balance?network=${network}`);
       const data = await res.json();
       if (res.ok) {
         setWalletInfo(data);
       }
 
-      const wfRes = await fetch('/api/workflows');
+      const wfRes = await fetch(`/api/workflows?network=${network}`);
       const wfData = await wfRes.json();
       if (wfRes.ok) {
         setWorkflows(wfData);
@@ -102,7 +129,7 @@ export default function DashboardPage() {
     if (session?.user) {
       fetchWalletAndBalances();
     }
-  }, [session]);
+  }, [session, network]);
 
   const copyAddress = () => {
     if (walletInfo?.address) {
@@ -121,6 +148,7 @@ export default function DashboardPage() {
           name: 'USDC Auto-Splitter Flow',
           nodes: [],
           edges: [],
+          network,
         }),
       });
 
@@ -146,6 +174,7 @@ export default function DashboardPage() {
           destinationAddress: withdrawAddress.trim(),
           amount: withdrawAmount.trim(),
           token: withdrawToken,
+          network,
         }),
       });
 
@@ -182,9 +211,7 @@ export default function DashboardPage() {
     );
   }
 
-  const maxUsdc = walletInfo?.usdc || '0';
-  const maxEurc = walletInfo?.eurc || '0';
-  const currentMax = withdrawToken === 'USDC' ? maxUsdc : maxEurc;
+  const currentMax = withdrawToken === 'USDC' ? walletInfo?.usdc || '0' : walletInfo?.eurc || '0';
 
   return (
     <div className="mx-auto max-w-7xl w-full p-6 sm:p-8 space-y-8">
@@ -206,7 +233,7 @@ export default function DashboardPage() {
             Arc Automation Dashboard
           </h1>
           <p className="text-sm text-slate-400">
-            Real-time Circle Developer-Controlled Custodial Wallet on Arc Testnet (#5042002)
+            Real-time Circle Developer-Controlled Custodial Wallet on {isMainnet ? 'Arc Mainnet (#5042)' : 'Arc Testnet (#5042002)'}
           </p>
         </div>
 
@@ -274,7 +301,7 @@ export default function DashboardPage() {
       {/* Wallet Info & Arc Balances Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* Wallet Address & Faucet Card */}
+        {/* Wallet Address & Faucet / Deposit Card */}
         <div className="lg:col-span-1 rounded-2xl border border-slate-800 bg-slate-900/60 p-6 space-y-6 flex flex-col justify-between backdrop-blur-xl">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -282,13 +309,17 @@ export default function DashboardPage() {
                 <Wallet className="h-4 w-4" />
                 Custodial Wallet Address
               </div>
-              <span className="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-[10px] font-bold text-emerald-400">
-                ARC TESTNET
+              <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                isMainnet ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
+              }`}>
+                {isMainnet ? 'ARC MAINNET' : 'ARC TESTNET'}
               </span>
             </div>
 
             <div className="rounded-xl border border-slate-800 bg-slate-950 p-3.5 space-y-2">
-              <p className="text-xs text-slate-500 font-medium">Arc Testnet Address</p>
+              <p className="text-xs text-slate-500 font-medium">
+                {isMainnet ? 'Arc Mainnet Address' : 'Arc Testnet Address'}
+              </p>
               <div className="flex items-center justify-between gap-2 font-mono text-xs text-slate-200 break-all">
                 <span>{walletInfo?.address || 'Loading address...'}</span>
                 <button
@@ -315,20 +346,26 @@ export default function DashboardPage() {
               <span>Withdraw USDC / EURC to External Wallet</span>
             </button>
 
-            <a
-              href="https://faucet.circle.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 w-full rounded-xl border border-indigo-500/30 bg-indigo-600/10 py-2.5 text-xs font-semibold text-indigo-300 hover:bg-indigo-600/20 transition-colors"
-            >
-              <span>Get Testnet USDC on Circle Faucet</span>
-              <ExternalLink className="h-3.5 w-3.5" />
-            </a>
+            {!isMainnet ? (
+              <a
+                href="https://faucet.circle.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 w-full rounded-xl border border-indigo-500/30 bg-indigo-600/10 py-2.5 text-xs font-semibold text-indigo-300 hover:bg-indigo-600/20 transition-colors"
+              >
+                <span>Get Testnet USDC on Circle Faucet</span>
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            ) : (
+              <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-2.5 text-center text-xs text-slate-400">
+                Deposit USDC to this address to fund automated money movement on Arc Mainnet
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Real-time Balances Cards */}
-        <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Real-time Balances Cards (Unified 6-decimal USDC + EURC, no native gas card) */}
+        <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
           
           {/* USDC Balance Card */}
           <div className="rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-950/40 via-slate-900 to-slate-900 p-6 flex flex-col justify-between">
@@ -343,11 +380,11 @@ export default function DashboardPage() {
               <div className="text-3xl font-bold font-mono text-white">
                 {loadingBalances ? '...' : walletInfo?.formattedUsdc || '0.00'}
               </div>
-              <p className="text-xs text-slate-400">ERC-20 USDC (6 Decimals)</p>
+              <p className="text-xs text-slate-400">USDC (6 Decimals) — Gas & Settlement</p>
             </div>
 
             <div className="mt-4 pt-3 border-t border-emerald-500/20 flex items-center justify-between text-[11px] text-emerald-300">
-              <span>Native Settlement Asset</span>
+              <span>Sub-second deterministic finality</span>
               <button
                 onClick={() => {
                   setWithdrawToken('USDC');
@@ -374,11 +411,11 @@ export default function DashboardPage() {
               <div className="text-3xl font-bold font-mono text-white">
                 {loadingBalances ? '...' : walletInfo?.formattedEurc || '0.00'}
               </div>
-              <p className="text-xs text-slate-400">Circle Euro Stablecoin</p>
+              <p className="text-xs text-slate-400">Circle Euro Stablecoin (6 Decimals)</p>
             </div>
 
             <div className="mt-4 pt-3 border-t border-purple-500/20 flex items-center justify-between text-[11px] text-purple-300">
-              <span>Arc Testnet EURC</span>
+              <span>{isMainnet ? 'Arc Mainnet EURC' : 'Arc Testnet EURC'}</span>
               <button
                 onClick={() => {
                   setWithdrawToken('EURC');
@@ -389,27 +426,6 @@ export default function DashboardPage() {
               >
                 Withdraw
               </button>
-            </div>
-          </div>
-
-          {/* Native Gas Token Card */}
-          <div className="rounded-2xl border border-blue-500/30 bg-gradient-to-br from-blue-950/40 via-slate-900 to-slate-900 p-6 flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-blue-400 uppercase tracking-wider">Native Gas Token</span>
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-500/20 text-blue-400">
-                <Zap className="h-4 w-4" />
-              </div>
-            </div>
-
-            <div className="mt-4 space-y-1">
-              <div className="text-3xl font-bold font-mono text-white">
-                {loadingBalances ? '...' : parseFloat(walletInfo?.nativeGasUsdc || '0').toFixed(4)}
-              </div>
-              <p className="text-xs text-slate-400">Native USDC (18 Decimals)</p>
-            </div>
-
-            <div className="mt-4 pt-3 border-t border-blue-500/20 text-[11px] text-blue-300">
-              Sub-second deterministic finality
             </div>
           </div>
         </div>
@@ -453,17 +469,17 @@ export default function DashboardPage() {
         </div>
 
         {workflows.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-900/30 p-8 text-center space-y-4">
-            <Activity className="h-10 w-10 text-slate-600 mx-auto" />
-            <div className="space-y-1">
-              <h3 className="text-base font-semibold text-white">No workflows created yet</h3>
-              <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                Build your first visual node flow to automate money movement when USDC arrives on Arc Testnet.
-              </p>
+          <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-900/30 p-12 text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600/10 text-indigo-400 mb-4">
+              <Zap className="h-6 w-6" />
             </div>
+            <h3 className="text-base font-bold text-white">No Workflows Configured on {isMainnet ? 'Arc Mainnet' : 'Arc Testnet'}</h3>
+            <p className="text-sm text-slate-400 mt-1 max-w-sm mx-auto">
+              Build your first visual node flow to automate money movement when USDC arrives on {isMainnet ? 'Arc Mainnet' : 'Arc Testnet'}.
+            </p>
             <button
               onClick={handleCreateWorkflow}
-              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-indigo-500 transition-colors"
+              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-600/20 hover:bg-indigo-500 transition-all"
             >
               <Plus className="h-4 w-4" />
               Create First Workflow
@@ -474,40 +490,50 @@ export default function DashboardPage() {
             {workflows.map((wf) => (
               <div
                 key={wf.id}
-                className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 space-y-4 flex flex-col justify-between hover:border-slate-700 transition-all"
+                className="group relative rounded-2xl border border-slate-800 bg-slate-900/60 p-5 space-y-4 hover:border-slate-700 transition-all flex flex-col justify-between"
               >
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <span
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
                         wf.isActive
-                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                           : 'bg-slate-800 text-slate-400'
                       }`}
                     >
-                      <span className={`h-1.5 w-1.5 rounded-full ${wf.isActive ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
-                      {wf.isActive ? 'Active' : 'Paused'}
+                      {wf.isActive ? 'Active Listener' : 'Paused'}
                     </span>
-                    <span className="text-xs text-slate-500 font-mono">
-                      {wf._count?.executions || 0} executions
+                    <span className="text-[10px] text-slate-500 flex items-center gap-1 font-mono">
+                      <Clock className="h-3 w-3" />
+                      {new Date(wf.updatedAt).toLocaleDateString()}
                     </span>
                   </div>
-                  <h3 className="text-base font-bold text-white truncate">{wf.name}</h3>
+
+                  <h4 className="text-sm font-bold text-white group-hover:text-indigo-400 transition-colors">
+                    {wf.name}
+                  </h4>
                 </div>
 
-                <div className="flex items-center gap-2 pt-3 border-t border-slate-800">
-                  <Link
-                    href={`/workflows/${wf.id}/edit`}
-                    className="flex-1 text-center rounded-lg border border-slate-800 bg-slate-950 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-colors"
-                  >
-                    Open Canvas
-                  </Link>
-                  <Link
-                    href={`/workflows/${wf.id}/executions`}
-                    className="flex-1 text-center rounded-lg border border-indigo-500/30 bg-indigo-500/10 py-2 text-xs font-semibold text-indigo-300 hover:bg-indigo-500/20 transition-colors"
-                  >
-                    Logs
-                  </Link>
+                <div className="pt-3 border-t border-slate-800/60 flex items-center justify-between text-xs">
+                  <span className="text-slate-400 font-mono text-[11px]">
+                    {wf._count?.executions || 0} executions
+                  </span>
+
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href={`/workflows/${wf.id}/executions`}
+                      className="text-slate-400 hover:text-white transition-colors"
+                      title="View Run History"
+                    >
+                      History
+                    </Link>
+                    <Link
+                      href={`/workflows/${wf.id}/edit`}
+                      className="font-semibold text-indigo-400 hover:text-indigo-300 transition-colors"
+                    >
+                      Edit Canvas →
+                    </Link>
+                  </div>
                 </div>
               </div>
             ))}
@@ -515,56 +541,58 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* WITHDRAW FUNDS MODAL */}
+      {/* WITHDRAWAL MODAL */}
       {showWithdrawModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
-          <div className="relative w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl space-y-6">
-            
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-6 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-              <div className="flex items-center gap-2 text-white font-bold text-lg">
-                <ArrowUpRight className="h-5 w-5 text-emerald-400" />
-                Withdraw Funds from Custodial Wallet
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-400">
+                  <ArrowUpRight className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Withdraw Custodial Funds</h3>
+                  <p className="text-xs text-slate-400">Transfer from Arc Custodial Wallet to external address</p>
+                </div>
               </div>
               <button
                 onClick={() => setShowWithdrawModal(false)}
-                className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-800 bg-slate-950 text-slate-400 hover:text-white transition-colors"
+                className="text-slate-400 hover:text-white transition-colors text-lg"
               >
-                <X className="h-4 w-4" />
+                ✕
               </button>
             </div>
 
             <form onSubmit={handleExecuteWithdrawal} className="space-y-4">
-              
               {/* Token Selector */}
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                  Select Token to Withdraw
+                  Select Asset
                 </label>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => setWithdrawToken('USDC')}
-                    className={`flex items-center justify-center gap-2 rounded-xl border p-3 text-xs font-bold transition-all ${
+                    className={`flex items-center justify-center gap-2 rounded-xl border p-3 text-xs font-bold transition-colors ${
                       withdrawToken === 'USDC'
-                        ? 'border-emerald-500 bg-emerald-500/20 text-emerald-300 shadow-md'
+                        ? 'border-emerald-500/50 bg-emerald-500/20 text-emerald-300'
                         : 'border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700'
                     }`}
                   >
                     <Coins className="h-4 w-4" />
-                    USDC ({walletInfo?.formattedUsdc || '0.00'})
+                    <span>USDC ({walletInfo?.formattedUsdc || '0.00'})</span>
                   </button>
-
                   <button
                     type="button"
                     onClick={() => setWithdrawToken('EURC')}
-                    className={`flex items-center justify-center gap-2 rounded-xl border p-3 text-xs font-bold transition-all ${
+                    className={`flex items-center justify-center gap-2 rounded-xl border p-3 text-xs font-bold transition-colors ${
                       withdrawToken === 'EURC'
-                        ? 'border-purple-500 bg-purple-500/20 text-purple-300 shadow-md'
+                        ? 'border-purple-500/50 bg-purple-500/20 text-purple-300'
                         : 'border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700'
                     }`}
                   >
                     <Coins className="h-4 w-4" />
-                    EURC ({walletInfo?.formattedEurc || '0.00'})
+                    <span>EURC ({walletInfo?.formattedEurc || '0.00'})</span>
                   </button>
                 </div>
               </div>
@@ -575,14 +603,16 @@ export default function DashboardPage() {
                   <label className="font-semibold text-slate-300 uppercase tracking-wider">
                     Amount ({withdrawToken})
                   </label>
-                  <span className="text-slate-400">
-                    Max Available: <strong className="text-white font-mono">{currentMax}</strong>
+                  <span className="text-slate-500 font-mono">
+                    Available: {currentMax} {withdrawToken}
                   </span>
                 </div>
                 <div className="relative">
                   <input
                     type="number"
                     step="0.000001"
+                    min="0.000001"
+                    max={currentMax}
                     placeholder="0.00"
                     value={withdrawAmount}
                     onChange={(e) => setWithdrawAmount(e.target.value)}
@@ -613,7 +643,7 @@ export default function DashboardPage() {
                   className="w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-xs text-white font-mono focus:border-indigo-500 focus:outline-none"
                 />
                 <p className="text-[11px] text-slate-500">
-                  Target EVM address on Arc Testnet (#5042002)
+                  Target EVM address on Arc {isMainnet ? 'Mainnet (#5042)' : 'Testnet (#5042002)'}
                 </p>
               </div>
 
@@ -633,7 +663,7 @@ export default function DashboardPage() {
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-1 font-mono underline hover:text-white"
                         >
-                          View Tx on ArcScan <ExternalLink className="h-3 w-3" />
+                          View Tx on {isMainnet ? 'Arc Explorer' : 'ArcScan'} <ExternalLink className="h-3 w-3" />
                         </a>
                       )}
                     </div>
@@ -651,25 +681,22 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   onClick={() => setShowWithdrawModal(false)}
-                  className="flex-1 rounded-xl border border-slate-800 bg-slate-950 py-3 text-xs font-semibold text-slate-400 hover:bg-slate-800 transition-colors"
+                  className="flex-1 rounded-xl border border-slate-800 py-3 text-xs font-semibold text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
                 >
-                  Cancel
+                  Close
                 </button>
                 <button
                   type="submit"
                   disabled={withdrawing}
-                  className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-xs font-bold text-white shadow-lg shadow-emerald-600/20 hover:bg-emerald-500 transition-colors disabled:opacity-50"
+                  className="flex-1 rounded-xl bg-emerald-600 py-3 text-xs font-semibold text-white hover:bg-emerald-500 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20"
                 >
                   {withdrawing ? (
                     <>
                       <RefreshCw className="h-4 w-4 animate-spin" />
-                      Transferring...
+                      <span>Submitting...</span>
                     </>
                   ) : (
-                    <>
-                      <ArrowUpRight className="h-4 w-4" />
-                      Confirm Withdrawal
-                    </>
+                    <span>Confirm Withdrawal</span>
                   )}
                 </button>
               </div>

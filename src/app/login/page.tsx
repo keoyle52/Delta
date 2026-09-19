@@ -104,7 +104,7 @@ export default function LoginPage() {
           </p>
           <div className="inline-flex items-center gap-1.5 rounded-full border border-purple-500/30 bg-purple-950/40 px-3 py-1 text-xs font-semibold text-purple-300">
             <span className="h-1.5 w-1.5 rounded-full bg-purple-400 animate-pulse" />
-            Built on Arc Testnet
+            Built on Arc
           </div>
 
           {/* Arc proof badge */}

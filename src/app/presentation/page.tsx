@@ -53,7 +53,7 @@ export default function PresentationPage() {
         <div className="flex items-center gap-3">
           <div className="hidden sm:flex items-center gap-2 text-[11px] font-mono text-slate-400 bg-slate-900 border border-slate-800 px-3 py-1 rounded-full">
             <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>Arc Testnet (#5042002) • Circle App Kit</span>
+            <span>Arc (#5042 / #5042002) • Circle App Kit</span>
           </div>
 
           <span className="text-xs font-mono text-indigo-300 bg-indigo-950/60 border border-indigo-500/30 px-3 py-1 rounded-full">
@@ -69,7 +69,7 @@ export default function PresentationPage() {
           <div className="w-full text-center space-y-6 animate-fadeIn">
             <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full border border-indigo-500/30 bg-indigo-950/40 text-[11px] font-bold text-indigo-300 uppercase tracking-widest mx-auto">
               <Sparkles className="h-3.5 w-3.5 text-indigo-400" />
-              <span>Hackathon Official Pitch Deck</span>
+              <span>Circle Arc Microgrants Pitch Deck</span>
             </div>
 
             <div className="space-y-3">
@@ -77,7 +77,7 @@ export default function PresentationPage() {
                 delta
               </h1>
               <p className="text-lg md:text-xl text-slate-300 max-w-2xl mx-auto font-medium leading-relaxed">
-                Autonomous Visual Workflow Automation Engine Built on Arc Testnet & Circle App Kit
+                Autonomous Visual Workflow Automation Engine Built on Arc & Circle App Kit
               </p>
             </div>
 
@@ -87,7 +87,7 @@ export default function PresentationPage() {
                   1. Capture Deposit
                 </div>
                 <p className="text-xs text-slate-400">
-                  Captures incoming USDC deposits on Arc Testnet in real time via Circle Webhooks.
+                  Captures incoming USDC deposits on Arc in real time via Circle Webhooks.
                 </p>
               </div>
               <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/60 backdrop-blur-xl">
@@ -95,7 +95,7 @@ export default function PresentationPage() {
                   2. Automate Pipeline
                 </div>
                 <p className="text-xs text-slate-400">
-                  Executes instant token swaps (USDC → EURC) & cross-chain CCTP bridges to Base Sepolia or Solana.
+                  Executes instant token swaps (USDC → EURC) & cross-chain CCTP bridges to Base or Solana.
                 </p>
               </div>
               <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/60 backdrop-blur-xl">
@@ -134,7 +134,7 @@ export default function PresentationPage() {
                     <strong className="text-white">No Event Triggers:</strong> Traditional Web3 wallets cannot react to incoming deposits automatically.
                   </li>
                   <li>
-                    <strong className="text-white">Fragmented Workflows:</strong> Managing balance flows between testnets and destination chains lacks visual orchestration.
+                    <strong className="text-white">Fragmented Workflows:</strong> Managing balance flows between networks and destination chains lacks visual orchestration.
                   </li>
                 </ul>
               </div>
@@ -149,7 +149,7 @@ export default function PresentationPage() {
                     <strong className="text-white">Visual Canvas Engine:</strong> Drag-and-drop node pipelines (Trigger → Swap → Bridge → Send → Alert).
                   </li>
                   <li>
-                    <strong className="text-white">Circle App Kit Integration:</strong> Automated CCTP bridging to Base Sepolia / Solana Devnet and instant DEX swaps.
+                    <strong className="text-white">Circle App Kit Integration:</strong> Automated CCTP bridging to Base / Solana and instant DEX swaps.
                   </li>
                   <li>
                     <strong className="text-white">Production Safety & Telemetry:</strong> Strict token filtering, txHash deduplication, and live onchain telemetry.
@@ -193,7 +193,7 @@ export default function PresentationPage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center text-xs">
               <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/40">
                 <div className="text-slate-500 font-bold uppercase text-[10px] mb-0.5">Blockchain</div>
-                <div className="text-white font-semibold">Arc Testnet (#5042002)</div>
+                <div className="text-white font-semibold">Arc (#5042 / #5042002)</div>
               </div>
               <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/40">
                 <div className="text-slate-500 font-bold uppercase text-[10px] mb-0.5">Wallets</div>
@@ -201,7 +201,7 @@ export default function PresentationPage() {
               </div>
               <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/40">
                 <div className="text-slate-500 font-bold uppercase text-[10px] mb-0.5">Bridge</div>
-                <div className="text-white font-semibold">CCTP Base Sepolia / Solana</div>
+                <div className="text-white font-semibold">CCTP Base / Solana</div>
               </div>
               <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/40">
                 <div className="text-slate-500 font-bold uppercase text-[10px] mb-0.5">Alerts</div>

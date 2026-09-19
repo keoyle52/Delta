@@ -5,6 +5,7 @@ import { sendArcTransfer } from '@/lib/circle/wallets';
 import { getWalletBalances, getTxFeePaidUsdc } from '@/lib/arc/rpc';
 import { validateWebhookUrl } from '@/lib/security/validateWebhookUrl';
 import { isValidEvmAddress, isValidSolanaAddress } from '@/lib/validation/address';
+import { Network, NetworkSchema, getNetworkConfig } from '@/config/network';
 
 function evaluateCondition(triggerAmount: number | string, field: string, operator: string, value: string): boolean {
   const numTrigger = parseFloat(String(triggerAmount || '0'));
@@ -127,6 +128,12 @@ export const executeWorkflowFunction = inngest.createFunction(
   async ({ event, step }) => {
     const { workflowId, triggerTxHash, triggerAmount, walletAddress, walletId } = event.data;
 
+    // Strict network validation
+    const parsedNetwork = NetworkSchema.safeParse(event.data.network || 'mainnet');
+    const network: Network = parsedNetwork.success ? parsedNetwork.data : 'mainnet';
+    const config = getNetworkConfig(network);
+    const networkName = network === 'mainnet' ? 'Arc Mainnet' : 'Arc Testnet';
+
     // 1. Fetch workflow and user details
     const workflow = await step.run('fetch-workflow', async () => {
       return await prisma.workflow.findUnique({
@@ -138,10 +145,20 @@ export const executeWorkflowFunction = inngest.createFunction(
       return { status: 'SKIPPED', reason: 'Workflow not found or inactive' };
     }
 
+    // Server-side security guard: 409 Conflict if workflow network does not match execution network
+    if (workflow.network !== network) {
+      console.error(
+        `[SECURITY EVENT] Inngest execution network mismatch: event network=${network}, workflow network=${workflow.network}`
+      );
+      throw new Error(
+        `Security Conflict: Workflow network (${workflow.network}) does not match execution event network (${network}).`
+      );
+    }
+
     const nodes = typeof workflow.nodes === 'string' ? JSON.parse(workflow.nodes) : (workflow.nodes || []);
     const triggerNode = nodes.find((n: any) => n.type === 'trigger');
 
-    // 2. Initialize execution record
+    // 2. Initialize execution record with network
     const execution = await step.run('create-execution-record', async () => {
       if (event.data.executionId) {
         const existing = await prisma.execution.findUnique({ where: { id: event.data.executionId } });
@@ -150,6 +167,7 @@ export const executeWorkflowFunction = inngest.createFunction(
       return await prisma.execution.create({
         data: {
           workflowId,
+          network,
           triggerTxHash,
           triggerAmount,
           status: 'RUNNING',
@@ -160,7 +178,7 @@ export const executeWorkflowFunction = inngest.createFunction(
               nodeName: triggerNode?.data?.label || 'USDC Received',
               status: 'COMPLETE',
               txHash: triggerTxHash,
-              details: `Triggered by transfer of ${triggerAmount} USDC`,
+              details: `Triggered by transfer of ${triggerAmount} USDC on ${networkName}`,
               timestamp: new Date().toISOString(),
             },
           ],
@@ -212,7 +230,7 @@ export const executeWorkflowFunction = inngest.createFunction(
           if (!event.data?.isSimulated && isFinalStatus && feePaidUsdc === null) {
             const hashForFee = logEntry.nodeType === 'bridge' ? (logEntry.arcBurnTxHash || logEntry.txHash) : logEntry.txHash;
             if (hashForFee) {
-              feePaidUsdc = await getTxFeePaidUsdc(hashForFee);
+              feePaidUsdc = await getTxFeePaidUsdc(hashForFee, network);
             }
           }
 
@@ -308,7 +326,7 @@ export const executeWorkflowFunction = inngest.createFunction(
             nodeName: nodeData.label || nodeType.toUpperCase(),
             status: 'RUNNING',
             simulated: true,
-            details: `[SIMULATED] Executing ${nodeType.toUpperCase()} action...`,
+            details: `[SIMULATED] Executing ${nodeType.toUpperCase()} action on ${networkName}...`,
           });
 
           // Simulate processing latency (300ms - 800ms)
@@ -317,9 +335,10 @@ export const executeWorkflowFunction = inngest.createFunction(
           const fakeTxHash = `0xsim-${randomUUID().slice(0, 16)}`;
           const actionAmountNum = parseFloat(actionAmount);
 
-          // Perform node-type-aware balance update in DB
+          // Perform node-type-aware balance update in DB scoped by network
           const simWallet = await prisma.wallet.findFirst({
             where: {
+              network,
               OR: [
                 ...(walletAddress ? [{ address: { equals: walletAddress, mode: 'insensitive' as const } }] : []),
                 ...(walletId ? [{ circleWalletId: { equals: walletId } }] : []),
@@ -327,7 +346,7 @@ export const executeWorkflowFunction = inngest.createFunction(
             },
           });
 
-          let detailMsg = `[SIMULATED] Successfully completed ${nodeType.toUpperCase()} of ${actionAmount} USDC`;
+          let detailMsg = `[SIMULATED] Successfully completed ${nodeType.toUpperCase()} of ${actionAmount} USDC on ${networkName}`;
 
           if (simWallet) {
             const currentUsdc = parseFloat(simWallet.simulatedUsdcBalance || '0');
@@ -346,7 +365,7 @@ export const executeWorkflowFunction = inngest.createFunction(
                   simulatedEurcBalance: updatedEurc,
                 },
               });
-              detailMsg = `[SIMULATED] Swapped ${actionAmount} USDC to ${addedEurc.toFixed(2)} EURC (Tx: ${fakeTxHash})`;
+              detailMsg = `[SIMULATED] Swapped ${actionAmount} USDC to ${addedEurc.toFixed(2)} EURC (Tx: ${fakeTxHash}) on ${networkName}`;
             } else {
               await prisma.wallet.update({
                 where: { id: simWallet.id },
@@ -356,11 +375,10 @@ export const executeWorkflowFunction = inngest.createFunction(
               });
 
               if (nodeType === 'bridge') {
-                detailMsg = `[SIMULATED] Bridged ${actionAmount} USDC to ${nodeData.destinationChain || 'Solana_Devnet'} recipient ${nodeData.destinationAddress || '0x...'} (Tx: ${fakeTxHash})`;
+                const targetChain = nodeData.destinationChain || config.appKitSolanaChain;
+                detailMsg = `[SIMULATED] Bridged ${actionAmount} USDC to ${targetChain} recipient ${nodeData.destinationAddress || '0x...'} (Tx: ${fakeTxHash}) on ${networkName}`;
               } else if (nodeType === 'send') {
-                detailMsg = `[SIMULATED] Sent ${actionAmount} USDC to recipient ${nodeData.destinationAddress || '0x...'} (Tx: ${fakeTxHash})`;
-              } else if (nodeType === 'notify') {
-                detailMsg = `[SIMULATED] Sent webhook alert for ${actionAmount} USDC`;
+                detailMsg = `[SIMULATED] Sent ${actionAmount} USDC to ${nodeData.destinationAddress || '0x...'} (Tx: ${fakeTxHash}) on ${networkName}`;
               }
             }
           }
@@ -377,16 +395,16 @@ export const executeWorkflowFunction = inngest.createFunction(
           return;
         }
 
+        // REAL ON-CHAIN EXECUTION BRANCH
         try {
-          // Check if this step already executed an on-chain transaction on a prior Inngest attempt
-          const freshExecForCheck = await prisma.execution.findUnique({ where: { id: execution.id } });
-          const currentLogsForCheck = typeof freshExecForCheck?.stepLogs === 'string'
-            ? JSON.parse(freshExecForCheck.stepLogs)
-            : (freshExecForCheck?.stepLogs || []);
-          const recordedLog = currentLogsForCheck.find((l: any) => l.stepId === node.id && l.txHash);
-
-          if (recordedLog?.txHash) {
-            console.log(`[INNGEST IDEMPOTENCY RECOVERY] Skipping redundant on-chain call for node ${node.id}. Recorded txHash: ${recordedLog.txHash}`);
+          if (nodeType === 'retain') {
+            await updateLog({
+              stepId: node.id,
+              nodeType: 'retain',
+              nodeName: nodeData.label || 'Retain In Custodial Wallet',
+              status: 'COMPLETE',
+              details: `Retained ${percentage}% (${actionAmount} USDC) safely in user wallet on ${networkName}`,
+            });
             return;
           }
 
@@ -394,13 +412,13 @@ export const executeWorkflowFunction = inngest.createFunction(
             const tokenOut = nodeData.tokenOut || 'EURC';
 
             // Pre-flight Gas Reserve Validation
-            const balances = await getWalletBalances(walletAddress).catch(() => ({ usdc: '0', eurc: '0' }));
+            const balances = await getWalletBalances(walletAddress, network).catch(() => ({ usdc: '0', eurc: '0' }));
             const currentUsdcBalance = parseFloat(balances.usdc || '0');
             const requiredGasReserve = 0.05;
 
             let executableAmount = parseFloat(actionAmount);
             if (currentUsdcBalance < requiredGasReserve) {
-              throw new Error(`Insufficient USDC balance on Arc Testnet wallet for gas reserve. Available: ${currentUsdcBalance.toFixed(4)} USDC, Required Gas Reserve: ${requiredGasReserve} USDC.`);
+              throw new Error(`Insufficient USDC balance on ${networkName} wallet for gas reserve. Available: ${currentUsdcBalance.toFixed(4)} USDC, Required Gas Reserve: ${requiredGasReserve} USDC.`);
             }
 
             if (currentUsdcBalance < executableAmount + requiredGasReserve) {
@@ -416,21 +434,16 @@ export const executeWorkflowFunction = inngest.createFunction(
               nodeType: 'swap',
               nodeName: nodeData.label || 'Swap Action',
               status: 'RUNNING',
-              details: `Submitting ${finalAmountStr} USDC swap USDC → ${tokenOut} on Arc Testnet...`,
+              details: `Submitting ${finalAmountStr} USDC swap USDC → ${tokenOut} on ${networkName}...`,
             });
 
-            let txResult: any;
-
-            if (process.env.CIRCLE_API_KEY && process.env.CIRCLE_ENTITY_SECRET) {
-              txResult = await executeAppKitSwap({
-                userWalletAddress: walletAddress,
-                walletId,
-                amountUsdc: finalAmountStr,
-                tokenOut,
-              });
-            } else {
-              throw new Error('CIRCLE_API_KEY / CIRCLE_ENTITY_SECRET missing in environment');
-            }
+            const txResult: any = await executeAppKitSwap({
+              userWalletAddress: walletAddress,
+              walletId,
+              amountUsdc: finalAmountStr,
+              tokenOut,
+              network,
+            });
 
             const realTxHash = txResult?.txHash || txResult?.id || txResult?.transactionHash || txResult?.steps?.find((s: any) => s.txHash)?.txHash;
 
@@ -443,14 +456,14 @@ export const executeWorkflowFunction = inngest.createFunction(
                 error: `Swap failed: no valid transaction hash returned from Circle App Kit. State: ${txResult?.state || 'unknown'}`,
               });
             } else {
-              // Persist txHash immediately to DB as PARTIAL to secure idempotency before any secondary operations
+              // Persist txHash immediately to DB as PARTIAL to secure idempotency
               await updateLog({
                 stepId: node.id,
                 nodeType: 'swap',
                 nodeName: nodeData.label || 'Swap Action',
                 status: 'PARTIAL',
                 txHash: realTxHash,
-                details: `Swap transaction submitted on Arc Testnet (tx: ${realTxHash})...`,
+                details: `Swap transaction submitted on ${networkName} (tx: ${realTxHash})...`,
               });
 
               await updateLog({
@@ -459,14 +472,14 @@ export const executeWorkflowFunction = inngest.createFunction(
                 nodeName: nodeData.label || 'Swap Action',
                 status: 'COMPLETE',
                 txHash: realTxHash,
-                details: `Swapped ${actionAmount} USDC to ${tokenOut} on Arc Testnet`,
+                details: `Swapped ${actionAmount} USDC to ${tokenOut} on ${networkName}`,
               });
             }
           } else if (nodeType === 'bridge') {
             const destinationAddress = nodeData.destinationAddress;
-            const destinationChain = nodeData.destinationChain || 'Solana_Devnet';
+            const destinationChain = nodeData.destinationChain || config.appKitSolanaChain;
 
-            const isSolana = destinationChain === 'Solana_Devnet';
+            const isSolana = destinationChain === 'Solana' || destinationChain === 'Solana_Devnet';
             const isValidAddr = isSolana
               ? isValidSolanaAddress(destinationAddress)
               : isValidEvmAddress(destinationAddress);
@@ -486,13 +499,13 @@ export const executeWorkflowFunction = inngest.createFunction(
             }
 
             // Pre-flight Gas Reserve Validation
-            const balances = await getWalletBalances(walletAddress).catch(() => ({ usdc: '0', eurc: '0' }));
+            const balances = await getWalletBalances(walletAddress, network).catch(() => ({ usdc: '0', eurc: '0' }));
             const currentUsdcBalance = parseFloat(balances.usdc || '0');
             const requiredGasReserve = 0.05;
 
             let executableAmount = parseFloat(actionAmount);
             if (currentUsdcBalance < requiredGasReserve) {
-              throw new Error(`Insufficient USDC balance on Arc Testnet wallet for gas reserve. Available: ${currentUsdcBalance.toFixed(4)} USDC, Required Gas Reserve: ${requiredGasReserve} USDC.`);
+              throw new Error(`Insufficient USDC balance on ${networkName} wallet for gas reserve. Available: ${currentUsdcBalance.toFixed(4)} USDC, Required Gas Reserve: ${requiredGasReserve} USDC.`);
             }
 
             if (currentUsdcBalance < executableAmount + requiredGasReserve) {
@@ -509,21 +522,17 @@ export const executeWorkflowFunction = inngest.createFunction(
               nodeName: nodeData.label || 'CCTP Bridge Action',
               status: 'RUNNING',
               destinationChain,
-              details: `Initiating CCTP bridge of ${finalAmountStr} USDC from Arc Testnet to ${destinationChain}...`,
+              details: `Initiating CCTP bridge of ${finalAmountStr} USDC from ${networkName} to ${destinationChain}...`,
             });
 
-            let txResult: any;
-            if (process.env.CIRCLE_API_KEY && process.env.CIRCLE_ENTITY_SECRET) {
-              txResult = await executeAppKitBridge({
-                userWalletAddress: walletAddress,
-                walletId,
-                destinationAddress,
-                amountUsdc: finalAmountStr,
-                destinationChain,
-              });
-            } else {
-              throw new Error('CIRCLE_API_KEY / CIRCLE_ENTITY_SECRET missing in environment');
-            }
+            const txResult: any = await executeAppKitBridge({
+              userWalletAddress: walletAddress,
+              walletId,
+              destinationAddress,
+              amountUsdc: finalAmountStr,
+              destinationChain,
+              network,
+            });
 
             const burnStep = txResult?.steps?.find((s: any) => s.name === 'burn');
             const mintStep = txResult?.steps?.find((s: any) => s.name === 'mint');
@@ -536,7 +545,7 @@ export const executeWorkflowFunction = inngest.createFunction(
                 nodeName: nodeData.label || 'CCTP Bridge Action',
                 status: 'FAILED',
                 destinationChain,
-                error: `Bridge failed: no valid burn transaction hash returned on Arc Testnet. State: ${txResult?.state || 'unknown'}`,
+                error: `Bridge failed: no valid burn transaction hash returned on ${networkName}. State: ${txResult?.state || 'unknown'}`,
               });
             } else if (mintStep?.state !== 'success') {
               await updateLog({
@@ -546,7 +555,7 @@ export const executeWorkflowFunction = inngest.createFunction(
                 status: 'PARTIAL',
                 txHash: realTxHash,
                 destinationChain,
-                details: `Burn submitted on Arc Testnet (tx: ${realTxHash}). Waiting for Circle CCTP attestation and mint on ${destinationChain}...`,
+                details: `Burn submitted on ${networkName} (tx: ${realTxHash}). Waiting for Circle CCTP attestation and mint on ${destinationChain}...`,
               });
             } else {
               const mintTxHash = mintStep?.txHash || realTxHash;
@@ -564,8 +573,8 @@ export const executeWorkflowFunction = inngest.createFunction(
           } else if (nodeType === 'send') {
             const destinationAddress = nodeData.destinationAddress;
 
-            if (!isValidEvmAddress(destinationAddress)) {
-              const errMessage = `Invalid send recipient EVM address ("${destinationAddress || ''}"). Valid EVM 0x address required.`;
+            if (!isValidEvmAddress(destinationAddress) || destinationAddress.toLowerCase() === '0x0000000000000000000000000000000000000000') {
+              const errMessage = `Invalid send recipient EVM address ("${destinationAddress || ''}"). Valid non-zero EVM 0x address required. Sends to address(0) revert on Arc.`;
               await updateLog({
                 stepId: node.id,
                 nodeType: 'send',
@@ -578,13 +587,13 @@ export const executeWorkflowFunction = inngest.createFunction(
             }
 
             // Pre-flight Gas Reserve Validation
-            const balances = await getWalletBalances(walletAddress).catch(() => ({ usdc: '0', eurc: '0' }));
+            const balances = await getWalletBalances(walletAddress, network).catch(() => ({ usdc: '0', eurc: '0' }));
             const currentUsdcBalance = parseFloat(balances.usdc || '0');
             const requiredGasReserve = 0.05;
 
             let executableAmount = parseFloat(actionAmount);
             if (currentUsdcBalance < requiredGasReserve) {
-              throw new Error(`Insufficient USDC balance on Arc Testnet wallet for gas reserve. Available: ${currentUsdcBalance.toFixed(4)} USDC, Required Gas Reserve: ${requiredGasReserve} USDC.`);
+              throw new Error(`Insufficient USDC balance on ${networkName} wallet for gas reserve. Available: ${currentUsdcBalance.toFixed(4)} USDC, Required Gas Reserve: ${requiredGasReserve} USDC.`);
             }
 
             if (currentUsdcBalance < executableAmount + requiredGasReserve) {
@@ -600,29 +609,27 @@ export const executeWorkflowFunction = inngest.createFunction(
               nodeType: 'send',
               nodeName: nodeData.label || 'Send Action',
               status: 'RUNNING',
-              details: `Submitting ${finalAmountStr} USDC transfer to ${destinationAddress} on Arc Testnet...`,
+              details: `Submitting ${finalAmountStr} USDC transfer to ${destinationAddress} on ${networkName}...`,
             });
 
             let realTxHash = '';
-            if (process.env.CIRCLE_API_KEY && process.env.CIRCLE_ENTITY_SECRET) {
-              try {
-                const res: any = await executeAppKitSend({
-                  userWalletAddress: walletAddress,
-                  walletId,
-                  destinationAddress,
-                  amountUsdc: finalAmountStr,
-                });
-                realTxHash = res?.txHash || res?.id || res?.transactionHash || res?.steps?.find((s: any) => s.txHash)?.txHash || '';
-              } catch (appKitErr) {
-                // Fallback to Developer Controlled Wallet transfer API if direct App Kit send adapter is busy
-                realTxHash = (await sendArcTransfer({
-                  walletId,
-                  destinationAddress,
-                  amountUsdc: finalAmountStr,
-                })) || '';
-              }
-            } else {
-              throw new Error('CIRCLE_API_KEY / CIRCLE_ENTITY_SECRET missing in environment');
+            try {
+              const res: any = await executeAppKitSend({
+                userWalletAddress: walletAddress,
+                walletId,
+                destinationAddress,
+                amountUsdc: finalAmountStr,
+                network,
+              });
+              realTxHash = res?.txHash || res?.id || res?.transactionHash || res?.steps?.find((s: any) => s.txHash)?.txHash || '';
+            } catch (appKitErr) {
+              // Fallback to Developer Controlled Wallet transfer API
+              realTxHash = (await sendArcTransfer({
+                walletId,
+                destinationAddress,
+                amountUsdc: finalAmountStr,
+                network,
+              })) || '';
             }
 
             if (!realTxHash) {
@@ -634,14 +641,14 @@ export const executeWorkflowFunction = inngest.createFunction(
                 error: `Send failed: no valid transaction hash returned from Circle App Kit.`,
               });
             } else {
-              // Persist txHash immediately to DB as PARTIAL to secure idempotency before any secondary operations
+              // Persist txHash immediately to DB as PARTIAL to secure idempotency
               await updateLog({
                 stepId: node.id,
                 nodeType: 'send',
                 nodeName: nodeData.label || 'Send Action',
                 status: 'PARTIAL',
                 txHash: realTxHash,
-                details: `Transfer submitted on Arc Testnet (tx: ${realTxHash})...`,
+                details: `Transfer submitted on ${networkName} (tx: ${realTxHash})...`,
               });
 
               await updateLog({
@@ -650,7 +657,7 @@ export const executeWorkflowFunction = inngest.createFunction(
                 nodeName: nodeData.label || 'Send Action',
                 status: 'COMPLETE',
                 txHash: realTxHash,
-                details: `Sent ${actionAmount} USDC to ${destinationAddress} on Arc Testnet`,
+                details: `Sent ${actionAmount} USDC to ${destinationAddress} on ${networkName}`,
               });
             }
           } else if (nodeType === 'notify') {
@@ -692,6 +699,7 @@ export const executeWorkflowFunction = inngest.createFunction(
                   body: JSON.stringify({
                     event: 'workflow.step.executed',
                     workflowId,
+                    network,
                     message,
                     amount: actionAmount,
                     txHash: triggerTxHash,
@@ -743,6 +751,6 @@ export const executeWorkflowFunction = inngest.createFunction(
       });
     });
 
-    return { status: 'SUCCESS', executionId: execution.id };
+    return { status: 'SUCCESS', executionId: execution.id, network };
   }
 );

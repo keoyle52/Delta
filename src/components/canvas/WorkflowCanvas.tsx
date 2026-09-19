@@ -459,7 +459,7 @@ function InnerWorkflowCanvas({
       if (res.ok) {
         setSaveStatus('success');
         setIsDirty(false);
-        addToast('Workflow Saved', 'success', 'All changes updated successfully on Arc Testnet.');
+        addToast('Workflow Saved', 'success', 'All changes updated successfully on Arc.');
         setTimeout(() => setSaveStatus('idle'), 3000);
       } else {
         const errData = await res.json();

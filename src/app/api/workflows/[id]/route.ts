@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { validateAllocationGraph } from '@/lib/validation/allocation';
+import { NetworkSchema, Network } from '@/config/network';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -14,6 +15,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const { id } = await params;
     const userId = (session.user as any).id;
+    const { searchParams } = new URL(req.url);
+    const rawNetwork = searchParams.get('network');
 
     const workflow = await prisma.workflow.findFirst({
       where: { id, userId },
@@ -21,6 +24,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     if (!workflow) {
       return NextResponse.json({ error: 'Workflow not found' }, { status: 404 });
+    }
+
+    if (rawNetwork) {
+      const parsed = NetworkSchema.safeParse(rawNetwork);
+      if (!parsed.success) {
+        return NextResponse.json({ error: 'Invalid network parameter' }, { status: 400 });
+      }
+      if (workflow.network !== parsed.data) {
+        console.error(`[SECURITY EVENT] Network mismatch: request network=${parsed.data}, workflow network=${workflow.network}`);
+        return NextResponse.json(
+          { error: 'Security Conflict: Workflow network does not match requested network.' },
+          { status: 409 }
+        );
+      }
     }
 
     return NextResponse.json({
@@ -45,7 +62,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const { id } = await params;
     const userId = (session.user as any).id;
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
 
     const existing = await prisma.workflow.findFirst({
       where: { id, userId },
@@ -53,6 +70,20 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     if (!existing) {
       return NextResponse.json({ error: 'Workflow not found' }, { status: 404 });
+    }
+
+    if (body.network) {
+      const parsed = NetworkSchema.safeParse(body.network);
+      if (!parsed.success) {
+        return NextResponse.json({ error: 'Invalid network parameter' }, { status: 400 });
+      }
+      if (existing.network !== parsed.data) {
+        console.error(`[SECURITY EVENT] Network mismatch on update: body network=${parsed.data}, workflow network=${existing.network}`);
+        return NextResponse.json(
+          { error: 'Security Conflict: Cannot mutate a workflow belonging to another network.' },
+          { status: 409 }
+        );
+      }
     }
 
     const nodesInput = body.nodes ?? existing.nodes;
@@ -89,9 +120,33 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
     const { id } = await params;
     const userId = (session.user as any).id;
+    const { searchParams } = new URL(req.url);
+    const rawNetwork = searchParams.get('network');
 
-    await prisma.workflow.deleteMany({
+    const existing = await prisma.workflow.findFirst({
       where: { id, userId },
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: 'Workflow not found' }, { status: 404 });
+    }
+
+    if (rawNetwork) {
+      const parsed = NetworkSchema.safeParse(rawNetwork);
+      if (!parsed.success) {
+        return NextResponse.json({ error: 'Invalid network parameter' }, { status: 400 });
+      }
+      if (existing.network !== parsed.data) {
+        console.error(`[SECURITY EVENT] Network mismatch on delete: query network=${parsed.data}, workflow network=${existing.network}`);
+        return NextResponse.json(
+          { error: 'Security Conflict: Cannot delete a workflow belonging to another network.' },
+          { status: 409 }
+        );
+      }
+    }
+
+    await prisma.workflow.delete({
+      where: { id },
     });
 
     return NextResponse.json({ success: true });

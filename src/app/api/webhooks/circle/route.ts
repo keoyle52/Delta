@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyCircleWebhookSignature } from '@/lib/circle/webhook';
 import { prisma } from '@/lib/prisma';
 import { inngest } from '@/lib/inngest/client';
-import { sendExecutionNotificationEmail } from '@/lib/email';
 import { logger } from '@/lib/logger';
+import { Network, NetworkSchema, getNetworkConfig } from '@/config/network';
 
 export async function POST(req: NextRequest) {
   try {
@@ -30,28 +30,59 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, message: 'SubscriptionConfirmed' });
     }
 
+    // Determine environment from query parameter (?env=mainnet or ?env=testnet) or payload
+    const { searchParams } = new URL(req.url);
+    const envParam = searchParams.get('env') || searchParams.get('network');
+    let network: Network = 'mainnet';
+
+    if (envParam) {
+      const parsed = NetworkSchema.safeParse(envParam);
+      if (parsed.success) {
+        network = parsed.data;
+      }
+    } else if (payload.notification?.blockchain === 'ARC-TESTNET' || payload.blockchain === 'ARC-TESTNET') {
+      network = 'testnet';
+    }
+
     const signatureHeader = req.headers.get('x-circle-signature');
     const keyIdHeader = req.headers.get('x-circle-key-id');
 
-    logger.debug('[WEBHOOK] Incoming Request Received!');
-    logger.debug('[WEBHOOK] KeyId:', keyIdHeader);
+    logger.debug(`[WEBHOOK ${network.toUpperCase()}] Incoming Request Received!`);
+    logger.debug(`[WEBHOOK ${network.toUpperCase()}] KeyId:`, keyIdHeader);
 
-    // 2. Cryptographic signature verification (v2 ECDSA SHA-256)
-    const verification = await verifyCircleWebhookSignature({
+    // 2. Cryptographic signature verification (v2 ECDSA SHA-256) using network-specific public key
+    let verification = await verifyCircleWebhookSignature({
       rawRequestBody,
       signatureHeader,
       keyIdHeader,
+      network,
     });
 
+    // If verification failed and env was not explicitly provided in URL, attempt other environment before rejecting
+    if (!verification.isValid && !envParam) {
+      const altNetwork: Network = network === 'mainnet' ? 'testnet' : 'mainnet';
+      const altVerification = await verifyCircleWebhookSignature({
+        rawRequestBody,
+        signatureHeader,
+        keyIdHeader,
+        network: altNetwork,
+      });
+      if (altVerification.isValid) {
+        network = altNetwork;
+        verification = altVerification;
+      }
+    }
+
     if (!verification.isValid) {
-      console.error('Circle Webhook Verification Rejected:', verification.reason);
+      console.error(`Circle Webhook Verification Rejected on ${network}:`, verification.reason);
       return NextResponse.json({ error: verification.reason || 'Invalid webhook signature' }, { status: 401 });
     }
 
-    // 3. Parse JSON payload (already parsed at top)
-    const notificationType = payload.notificationType || '';
+    const config = getNetworkConfig(network);
 
-    logger.debug('[WEBHOOK] notificationType:', notificationType);
+    // 3. Parse notification payload
+    const notificationType = payload.notificationType || '';
+    logger.debug(`[WEBHOOK ${network.toUpperCase()}] notificationType:`, notificationType);
 
     const eventData = payload.notification || payload.event || payload;
     const rawTxType = (eventData.transactionType || eventData.type || eventData.operation || eventData.direction || '').toUpperCase();
@@ -65,11 +96,11 @@ export async function POST(req: NextRequest) {
 
     if (isMatchingType) {
       if (rawTxType === 'OUTBOUND' || rawTxType.includes('SWAP') || rawTxType.includes('INTERNAL')) {
-        logger.debug('[WEBHOOK] Ignored OUTBOUND/SWAP/INTERNAL transaction to prevent self-trigger loop');
+        logger.debug(`[WEBHOOK ${network.toUpperCase()}] Ignored OUTBOUND/SWAP/INTERNAL transaction to prevent self-trigger loop`);
         return NextResponse.json({ success: true, message: 'Ignored non-inbound or swap transaction' });
       }
 
-      // FIX B: STRICT TOKEN FILTERING (Reject EURC and non-USDC inbound transfers to prevent swap loop)
+      // STRICT TOKEN FILTERING: Reject EURC and non-USDC inbound transfers to prevent swap loop
       const tokenSymbol = (
         eventData.tokenSymbol ||
         eventData.symbol ||
@@ -87,10 +118,10 @@ export async function POST(req: NextRequest) {
 
       const isEurc =
         tokenSymbol === 'EURC' ||
-        tokenAddress === '0x89b50855aa3be2f677cd6303cec089b5f319d72a';
+        tokenAddress === config.eurcAddress.toLowerCase();
 
       if (isEurc || (tokenSymbol && tokenSymbol !== 'USDC' && tokenSymbol !== 'USD')) {
-        logger.debug(`[WEBHOOK] Ignored non-USDC inbound transfer (token: ${tokenSymbol || tokenAddress}) to prevent swap loop.`);
+        logger.debug(`[WEBHOOK ${network.toUpperCase()}] Ignored non-USDC inbound transfer (token: ${tokenSymbol || tokenAddress}) to prevent swap loop.`);
         return NextResponse.json({ success: true, message: 'Ignored non-USDC inbound transfer' });
       }
 
@@ -116,26 +147,27 @@ export async function POST(req: NextRequest) {
       const transferAmount = parseFloat(transferAmountStr);
       const txHash = eventData.txHash || eventData.transactionHash || eventData.id || `0x-webhook-${Date.now()}`;
 
-      // FIX C: DEDUPLICATION CHECK BY TX HASH
+      // Deduplication check by triggerTxHash and network
       const existingExecution = await prisma.execution.findFirst({
-        where: { triggerTxHash: txHash },
+        where: { triggerTxHash: txHash, network },
       });
 
       if (existingExecution) {
-        logger.debug(`[WEBHOOK] Ignored duplicate txHash: ${txHash}`);
+        logger.debug(`[WEBHOOK ${network.toUpperCase()}] Ignored duplicate txHash: ${txHash}`);
         return NextResponse.json({ success: true, message: 'Transaction already processed' });
       }
 
-      logger.debug('[WEBHOOK] Matched INBOUND USDC payload fields:');
+      logger.debug(`[WEBHOOK ${network.toUpperCase()}] Matched INBOUND USDC payload fields:`);
       logger.debug('   walletId:', walletId);
       logger.debug('   destinationAddress:', destinationAddress);
       logger.debug('   sourceAddress:', sourceAddress);
       logger.debug('   transferAmountStr:', transferAmountStr);
 
       if ((transferState === 'COMPLETE' || transferState === 'SUCCESS' || transferState === 'CONFIRMED')) {
-        // Find matching custodial wallet in DB by address OR by circleWalletId
+        // Find matching custodial wallet in DB by address OR circleWalletId, strictly scoped by network
         const wallet = await prisma.wallet.findFirst({
           where: {
+            network,
             OR: [
               ...(destinationAddress ? [{ address: { equals: destinationAddress, mode: 'insensitive' as const } }] : []),
               ...(walletId ? [{ circleWalletId: { equals: walletId } }] : []),
@@ -145,7 +177,7 @@ export async function POST(req: NextRequest) {
             user: {
               include: {
                 workflows: {
-                  where: { isActive: true },
+                  where: { isActive: true, network },
                 },
               },
             },
@@ -153,25 +185,24 @@ export async function POST(req: NextRequest) {
         });
 
         if (wallet && wallet.user && wallet.user.workflows.length > 0) {
-          // FIX D: IGNORE SENDER IF IT MATCHES USER'S OWN CUSTODIAL WALLET OR ADAPTER
+          // Ignore sender if it matches user's own custodial wallet
           const userWalletAddr = wallet.address.toLowerCase();
           if (sourceAddress && (sourceAddress === userWalletAddr || sourceAddress === destinationAddress)) {
-            logger.debug(`[WEBHOOK] Ignored transfer originating from user's own wallet/adapter (${sourceAddress})`);
-            return NextResponse.json({ success: true, message: 'Ignored internal wallet/adapter transfer' });
+            logger.debug(`[WEBHOOK ${network.toUpperCase()}] Ignored transfer originating from user's own wallet (${sourceAddress})`);
+            return NextResponse.json({ success: true, message: 'Ignored internal wallet transfer' });
           }
 
-          logger.debug(`[WEBHOOK] Found Wallet in DB! Address: ${wallet.address} | Workflows: ${wallet.user.workflows.length}`);
+          logger.debug(`[WEBHOOK ${network.toUpperCase()}] Found Wallet in DB! Address: ${wallet.address} | Workflows: ${wallet.user.workflows.length}`);
           let triggeredCount = 0;
 
           for (const workflow of wallet.user.workflows) {
-            // ACTIVE EXECUTION GUARD: Check if workflow currently has an active PENDING or RUNNING execution
-            // Replaces fixed 120s cooldown with real state check. Once COMPLETE/FAILED, workflow can immediately re-trigger.
-            // STALE_EXECUTION_TIMEOUT_MS (30m) acts as a safety valve in case of unhandled engine crashes.
+            // Active execution guard per workflow
             const STALE_EXECUTION_TIMEOUT_MS = 30 * 60 * 1000;
 
             const activeExecution = await prisma.execution.findFirst({
               where: {
                 workflowId: workflow.id,
+                network,
                 status: { in: ['PENDING', 'RUNNING'] },
                 startedAt: { gt: new Date(Date.now() - STALE_EXECUTION_TIMEOUT_MS) },
               },
@@ -179,7 +210,7 @@ export async function POST(req: NextRequest) {
 
             if (activeExecution) {
               logger.debug(
-                `[WEBHOOK] Workflow ${workflow.id} already has an active execution (${activeExecution.id}, status=${activeExecution.status}, started ${activeExecution.startedAt}). Skipping trigger until complete.`
+                `[WEBHOOK ${network.toUpperCase()}] Workflow ${workflow.id} already has an active execution (${activeExecution.id}, status=${activeExecution.status}). Skipping trigger until complete.`
               );
               continue;
             }
@@ -194,12 +225,13 @@ export async function POST(req: NextRequest) {
                 : Infinity;
 
               if (transferAmount >= minAmount && transferAmount <= maxAmount) {
-                logger.debug(`[WEBHOOK] Triggering Workflow ID: ${workflow.id}`);
+                logger.debug(`[WEBHOOK ${network.toUpperCase()}] Triggering Workflow ID: ${workflow.id}`);
 
-                // 1. Create DB execution record
+                // 1. Create DB execution record with network
                 const execution = await prisma.execution.create({
                   data: {
                     workflowId: workflow.id,
+                    network,
                     triggerTxHash: txHash,
                     triggerAmount: transferAmountStr,
                     status: 'RUNNING',
@@ -210,7 +242,7 @@ export async function POST(req: NextRequest) {
                         nodeName: triggerNode?.data?.label || 'USDC Received',
                         status: 'COMPLETE',
                         txHash: txHash,
-                        details: `Triggered by transfer of ${transferAmountStr} USDC`,
+                        details: `Triggered by transfer of ${transferAmountStr} USDC on ${network === 'mainnet' ? 'Arc Mainnet' : 'Arc Testnet'}`,
                         timestamp: new Date().toISOString(),
                       },
                     ],
@@ -218,12 +250,13 @@ export async function POST(req: NextRequest) {
                   },
                 });
 
-                // 2. Dispatch event to Inngest engine
+                // 2. Dispatch event to Inngest engine with network
                 const inngestRes = await inngest.send({
                   name: 'workflow.trigger',
                   data: {
                     executionId: execution.id,
                     workflowId: workflow.id,
+                    network,
                     triggerTxHash: txHash,
                     triggerAmount: transferAmountStr,
                     walletAddress: wallet.address,
@@ -231,7 +264,7 @@ export async function POST(req: NextRequest) {
                   },
                 });
 
-                console.log(`✅ Webhook execution ${execution.id} dispatched to Inngest engine. Event IDs: ${JSON.stringify(inngestRes?.ids || [])}`);
+                console.log(`✅ Webhook execution ${execution.id} (${network}) dispatched to Inngest engine. Event IDs: ${JSON.stringify(inngestRes?.ids || [])}`);
                 triggeredCount++;
               }
             }
@@ -239,14 +272,15 @@ export async function POST(req: NextRequest) {
 
           return NextResponse.json({
             success: true,
-            message: `Processed transfer of ${transferAmountStr} USDC to ${destinationAddress || walletId}`,
+            network,
+            message: `Processed transfer of ${transferAmountStr} USDC to ${destinationAddress || walletId} on ${network}`,
             triggeredWorkflows: triggeredCount,
           });
         }
       }
     }
 
-    return NextResponse.json({ success: true, message: 'Webhook received' });
+    return NextResponse.json({ success: true, network, message: 'Webhook received' });
   } catch (error: any) {
     console.error('Circle Webhook Processing Error:', error);
     return NextResponse.json(
@@ -254,29 +288,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-/**
- * BFS Traversal to find all action nodes transitively reachable from the trigger node
- */
-function getReachableActionNodes(triggerNodeId: string, nodes: any[], edges: any[]) {
-  const visited = new Set<string>();
-  const queue = [triggerNodeId];
-  const orderedActionNodes: any[] = [];
-
-  while (queue.length > 0) {
-    const currentId = queue.shift()!;
-    const outgoing = edges.filter((e: any) => e.source === currentId);
-    for (const edge of outgoing) {
-      if (!visited.has(edge.target)) {
-        visited.add(edge.target);
-        const node = nodes.find((n: any) => n.id === edge.target);
-        if (node && node.type !== 'trigger') {
-          orderedActionNodes.push(node);
-          queue.push(node.id);
-        }
-      }
-    }
-  }
-  return orderedActionNodes;
 }

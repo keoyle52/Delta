@@ -1,44 +1,35 @@
 import { initiateDeveloperControlledWalletsClient } from '@circle-fin/developer-controlled-wallets';
 import { randomUUID } from 'crypto';
+import { getNetworkConfig, getServerCircleCredentials, Network } from '@/config/network';
 
 /**
- * Initializes the Circle Developer-Controlled Wallets SDK Client
+ * Initializes the Circle Developer-Controlled Wallets SDK Client for the specified network.
  */
-export function getCircleWalletsClient() {
-  const apiKey = process.env.CIRCLE_API_KEY;
-  const entitySecret = process.env.CIRCLE_ENTITY_SECRET;
-
-  if (!apiKey || apiKey.trim() === '') {
-    throw new Error('CIRCLE_API_KEY is not set in environment variables.');
-  }
+export function getCircleWalletsClient(network: Network = 'mainnet') {
+  const credentials = getServerCircleCredentials(network);
 
   return initiateDeveloperControlledWalletsClient({
-    apiKey,
-    entitySecret: entitySecret || '',
+    apiKey: credentials.apiKey,
+    entitySecret: credentials.entitySecret,
   });
 }
 
 /**
- * Provision a single Developer-Controlled Custodial Wallet on Arc Testnet
+ * Provision a single Developer-Controlled Custodial Wallet for the specified network.
  */
-export async function createArcUserWallet(userId: string) {
-  const client = getCircleWalletsClient();
-  const walletSetId = process.env.CIRCLE_WALLET_SET_ID;
-
-  if (!walletSetId || walletSetId.trim() === '') {
-    throw new Error(
-      'CIRCLE_WALLET_SET_ID is not configured in environment variables. Run setup:wallet-set script first.'
-    );
-  }
+export async function createArcUserWallet(userId: string, network: Network = 'mainnet') {
+  const config = getNetworkConfig(network);
+  const credentials = getServerCircleCredentials(network);
+  const client = getCircleWalletsClient(network);
 
   try {
     const idempotencyKey = randomUUID();
 
-    // Create EVM-compatible EOA wallet on Arc Testnet
+    // Create EVM-compatible EOA wallet on Arc network
     const response = await client.createWallets({
-      blockchains: ['ARC-TESTNET' as any],
+      blockchains: [config.circleChainCode as any],
       count: 1,
-      walletSetId,
+      walletSetId: credentials.walletSetId,
       accountType: 'EOA',
       idempotencyKey,
     });
@@ -46,38 +37,41 @@ export async function createArcUserWallet(userId: string) {
     const createdWallet = response.data?.wallets?.[0];
 
     if (!createdWallet) {
-      throw new Error('Circle API returned an empty wallet array.');
+      throw new Error(`Circle API returned an empty wallet array for ${network}.`);
     }
 
     return {
       circleWalletId: createdWallet.id,
-      circleWalletSetId: walletSetId,
+      circleWalletSetId: credentials.walletSetId,
       address: createdWallet.address,
-      blockchain: 'ARC-TESTNET',
+      blockchain: config.circleChainCode,
+      network,
     };
   } catch (error: any) {
-    console.error('Failed to create Circle wallet:', error);
+    console.error(`Failed to create Circle wallet on ${network}:`, error);
     throw new Error(
-      `Circle Wallet Creation Failed: ${error.response?.data?.message || error.message || error}`
+      `Circle Wallet Creation Failed on ${network}: ${error.response?.data?.message || error.message || error}`
     );
   }
 }
 
 /**
- * Perform outbound transfer of USDC / EURC on Arc Testnet
+ * Perform outbound transfer of USDC / EURC on Arc
  */
 export async function sendArcTransfer({
   walletId,
   destinationAddress,
   amountUsdc,
   tokenId,
+  network = 'mainnet',
 }: {
   walletId: string;
   destinationAddress: string;
   amountUsdc: string;
   tokenId?: string;
+  network?: Network;
 }) {
-  const client = getCircleWalletsClient();
+  const client = getCircleWalletsClient(network);
 
   try {
     const idempotencyKey = randomUUID();
@@ -101,7 +95,7 @@ export async function sendArcTransfer({
     const response = await client.createTransaction(payload);
     return response.data?.id;
   } catch (error: any) {
-    console.error('Circle Transfer error:', error.response?.data || error);
-    throw new Error(`Circle Wallet outbound transfer failed: ${error.response?.data?.message || error.message || error}`);
+    console.error(`Circle Transfer error on ${network}:`, error.response?.data || error);
+    throw new Error(`Circle Wallet outbound transfer failed on ${network}: ${error.response?.data?.message || error.message || error}`);
   }
 }

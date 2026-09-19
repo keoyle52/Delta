@@ -3,64 +3,91 @@ import CredentialsProvider from 'next-auth/providers/credentials';
 import { randomUUID, randomBytes } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { createArcUserWallet } from '@/lib/circle/wallets';
+import { Network } from '@/config/network';
 
 /**
  * Creates an isolated simulation demo session for a new visitor.
- * Generates a unique user record and a fake EVM address without calling Circle API or Arc RPC.
+ * Generates a unique user record and fake EVM addresses without calling Circle API or Arc RPC.
  */
 export async function createSimulatedDemoSession() {
   const simId = randomUUID().slice(0, 8);
   const email = `sim-${simId}@delta.demo`;
-  const fakeAddress = `0x${randomBytes(20).toString('hex')}`;
-  const fakeCircleWalletId = `sim-${randomUUID()}`;
+  const fakeMainnetAddress = `0x${randomBytes(20).toString('hex')}`;
+  const fakeTestnetAddress = `0x${randomBytes(20).toString('hex')}`;
+  const fakeMainnetCircleWalletId = `sim-mainnet-${randomUUID()}`;
+  const fakeTestnetCircleWalletId = `sim-testnet-${randomUUID()}`;
 
   const user = await prisma.user.create({
     data: {
       email,
       isSimulated: true,
-      wallet: {
-        create: {
-          circleWalletId: fakeCircleWalletId,
-          circleWalletSetId: 'sim-set-01',
-          address: fakeAddress,
-          blockchain: 'ARC-TESTNET (SIMULATED)',
-          isSimulated: true,
-          simulatedUsdcBalance: '0',
-        },
+      activeNetwork: 'mainnet',
+      wallets: {
+        create: [
+          {
+            circleWalletId: fakeMainnetCircleWalletId,
+            circleWalletSetId: 'sim-set-mainnet',
+            address: fakeMainnetAddress,
+            blockchain: 'ARC (SIMULATED)',
+            network: 'mainnet',
+            isSimulated: true,
+            simulatedUsdcBalance: '100.00',
+            simulatedEurcBalance: '50.00',
+          },
+          {
+            circleWalletId: fakeTestnetCircleWalletId,
+            circleWalletSetId: 'sim-set-testnet',
+            address: fakeTestnetAddress,
+            blockchain: 'ARC-TESTNET (SIMULATED)',
+            network: 'testnet',
+            isSimulated: true,
+            simulatedUsdcBalance: '100.00',
+            simulatedEurcBalance: '50.00',
+          },
+        ],
       },
     },
     include: {
-      wallet: true,
+      wallets: true,
     },
   });
+
+  const mainnetWallet = user.wallets.find((w) => w.network === 'mainnet') || user.wallets[0];
 
   return {
     id: user.id,
     email: user.email,
-    walletAddress: user.wallet?.address || fakeAddress,
+    walletAddress: mainnetWallet?.address || fakeMainnetAddress,
     isSimulated: true,
   };
 }
 
 /**
- * Idempotently fetches existing user wallet or provisions a single new custodial wallet on Arc Testnet
+ * Idempotently fetches existing user wallet or provisions a single new custodial wallet on the specified network.
+ * Wallets are provisioned lazily per network.
  */
-export async function getOrCreateUserWallet(userId: string) {
-  // 1. Check if user already has a provisioned wallet
+export async function getOrCreateUserWallet(userId: string, network: Network = 'mainnet') {
+  // 1. Check if user already has a provisioned wallet for this network
   const existingWallet = await prisma.wallet.findUnique({
-    where: { userId },
+    where: {
+      userId_network: {
+        userId,
+        network,
+      },
+    },
   });
 
   if (existingWallet) {
     return existingWallet;
   }
 
-  // 2. Provision new Developer-Controlled Custodial Wallet on Arc Testnet
-  const newWallet = await createArcUserWallet(userId);
+  // 2. Provision new Developer-Controlled Custodial Wallet for the specified network
+  const newWallet = await createArcUserWallet(userId, network);
 
   // 3. Handle potential duplicate address / walletId in DB
   const existingAddressWallet = await prisma.wallet.findFirst({
     where: {
+      network,
       OR: [
         { address: newWallet.address },
         { circleWalletId: newWallet.circleWalletId },
@@ -82,6 +109,7 @@ export async function getOrCreateUserWallet(userId: string) {
       circleWalletSetId: newWallet.circleWalletSetId,
       address: newWallet.address,
       blockchain: newWallet.blockchain,
+      network,
     },
   });
 }
@@ -137,20 +165,26 @@ export const authOptions: NextAuthOptions = {
         // 3. Find existing user OR auto-register new user in Prisma
         let user = await prisma.user.findUnique({
           where: { email },
+          include: { wallets: true },
         });
 
         if (!user) {
           user = await prisma.user.create({
-            data: { email },
+            data: { email, activeNetwork: 'mainnet' },
+            include: { wallets: true },
           });
         }
 
-        // 4. Provision / link Circle custodial wallet on Arc Testnet idempotently
-        let userWallet: any = null;
-        try {
-          userWallet = await getOrCreateUserWallet(user.id);
-        } catch (walletErr: any) {
-          console.warn('Wallet provisioning warning during login:', walletErr.message);
+        // 4. Provision / link Circle custodial wallet on active network idempotently
+        const activeNetwork = (user.activeNetwork as Network) || 'mainnet';
+        let userWallet = user.wallets?.find((w) => w.network === activeNetwork) || null;
+
+        if (!userWallet) {
+          try {
+            userWallet = await getOrCreateUserWallet(user.id, activeNetwork);
+          } catch (walletErr: any) {
+            console.warn(`Wallet lazy-provisioning deferred during login (${activeNetwork}):`, walletErr.message);
+          }
         }
 
         return {

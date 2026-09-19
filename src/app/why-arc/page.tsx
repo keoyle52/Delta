@@ -14,6 +14,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { ARC_TARGET_FEE_USD, ARC_FINALITY_TARGET } from '@/lib/arc-advantage-constants';
+import { useNetwork } from '@/context/NetworkContext';
 
 interface StatsResponse {
   byType: {
@@ -48,20 +49,21 @@ interface StatsResponse {
 }
 
 export default function WhyArcPage() {
+  const { config } = useNetwork();
   const [data, setData] = useState<StatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchStats = async () => {
-    setLoading(true);
-    setError(null);
     try {
+      setLoading(true);
+      setError(null);
       const res = await fetch('/api/stats/arc-advantage');
-      if (!res.ok) throw new Error('Failed to load performance metrics');
-      const stats = await res.json();
-      setData(stats);
-    } catch (err: any) {
-      setError(err.message || 'Error fetching metrics');
+      if (!res.ok) throw new Error('Failed to load stats');
+      const json = await res.json();
+      setData(json);
+    } catch (e: any) {
+      setError(e.message || 'Error fetching telemetry data');
     } finally {
       setLoading(false);
     }
@@ -74,8 +76,8 @@ export default function WhyArcPage() {
   const totalRealTx = data?.totals?.totalRealTransactions || 0;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500/30 selection:text-indigo-200 pb-20">
-      <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-8 space-y-8">
+    <div className="min-h-screen bg-slate-950 text-slate-100 py-8 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-6xl mx-auto space-y-8">
         {/* Page Header */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-800/80 pb-6">
           <div>
@@ -86,7 +88,7 @@ export default function WhyArcPage() {
               </h1>
             </div>
             <p className="mt-1 text-sm text-slate-400">
-              Real live performance telemetry measured directly on Arc Testnet.
+              Real live performance telemetry measured directly on Arc.
             </p>
           </div>
 
@@ -138,7 +140,7 @@ export default function WhyArcPage() {
               </p>
             </div>
             <p className="pt-3 border-t border-slate-800/80 text-[11px] text-slate-500">
-              Verified live execution records on Arc Testnet (#5042002).
+              Verified live execution records on Arc.
             </p>
           </div>
 
@@ -364,7 +366,7 @@ export default function WhyArcPage() {
                     <tr key={idx} className="hover:bg-slate-800/40 transition-colors">
                       <td className="px-4 py-3 font-semibold">
                         <a
-                          href={`https://testnet.arcscan.app/tx/${tx.txHash}`}
+                          href={`${config.explorerBaseUrl}/tx/${tx.txHash}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1.5"
@@ -400,7 +402,7 @@ export default function WhyArcPage() {
             </div>
           )}
         </div>
-      </main>
+      </div>
     </div>
   );
 }

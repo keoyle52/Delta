@@ -1,6 +1,7 @@
 import { createPublicKey, verify as cryptoVerify } from 'crypto';
 import axios from 'axios';
 import { logger } from '@/lib/logger';
+import { getServerCircleCredentials, Network } from '@/config/network';
 
 // In-memory cache for Circle public keys (Key ID -> { publicKeyPem/Der, expiresAt })
 interface CachedKey {
@@ -12,36 +13,34 @@ const publicKeyCache = new Map<string, CachedKey>();
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour TTL
 
 /**
- * Dynamically fetches Circle's v2 Public Key by keyId with in-memory caching
+ * Dynamically fetches Circle's v2 Public Key by keyId with in-memory caching per network environment.
  * URL: https://api.circle.com/v2/notifications/publicKey/${keyId}
  */
-export async function getCirclePublicKeyDer(keyId: string): Promise<string> {
-  const cached = publicKeyCache.get(keyId);
+export async function getCirclePublicKeyDer(keyId: string, network: Network = 'mainnet'): Promise<string> {
+  const cacheKey = `${network}:${keyId}`;
+  const cached = publicKeyCache.get(cacheKey);
   const now = Date.now();
 
   if (cached && cached.expiresAt > now) {
-    logger.debug('[WEBHOOK] Using cached public key for keyId:', keyId);
+    logger.debug(`[WEBHOOK ${network.toUpperCase()}] Using cached public key for keyId:`, keyId);
     return cached.publicKeyDerBase64;
   }
 
-  const apiKey = process.env.CIRCLE_API_KEY;
-  if (!apiKey || apiKey.trim() === '') {
-    throw new Error('CIRCLE_API_KEY environment variable is required to fetch Circle notification public key');
-  }
+  const credentials = getServerCircleCredentials(network);
 
   try {
     const url = `https://api.circle.com/v2/notifications/publicKey/${keyId}`;
-    logger.debug(`[WEBHOOK] Fetching Public Key from Circle v2 API: ${url}`);
+    logger.debug(`[WEBHOOK ${network.toUpperCase()}] Fetching Public Key from Circle v2 API: ${url}`);
 
     const response = await axios.get(url, {
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${credentials.apiKey}`,
         Accept: 'application/json',
       },
       timeout: 5000,
     });
 
-    logger.debug('[WEBHOOK] Public Key Fetch Response Status:', response.status);
+    logger.debug(`[WEBHOOK ${network.toUpperCase()}] Public Key Fetch Response Status:`, response.status);
 
     const publicKeyBase64 = response.data?.data?.publicKey || response.data?.publicKey;
 
@@ -50,15 +49,15 @@ export async function getCirclePublicKeyDer(keyId: string): Promise<string> {
     }
 
     // Cache key for 1 hour
-    publicKeyCache.set(keyId, {
+    publicKeyCache.set(cacheKey, {
       publicKeyDerBase64: publicKeyBase64,
       expiresAt: now + CACHE_TTL_MS,
     });
 
     return publicKeyBase64;
   } catch (error: any) {
-    console.error(`[DEBUG WEBHOOK] Failed to fetch Circle notification public key (v2) for keyId ${keyId}:`, error.message || error);
-    throw new Error(`Unable to fetch Circle v2 public key for keyId: ${keyId}`);
+    console.error(`[DEBUG WEBHOOK ${network.toUpperCase()}] Failed to fetch Circle notification public key (v2) for keyId ${keyId}:`, error.message || error);
+    throw new Error(`Unable to fetch Circle v2 public key for keyId: ${keyId} on ${network}`);
   }
 }
 
@@ -70,10 +69,12 @@ export async function verifyCircleWebhookSignature({
   rawRequestBody,
   signatureHeader,
   keyIdHeader,
+  network = 'mainnet',
 }: {
   rawRequestBody: string;
   signatureHeader: string | null;
   keyIdHeader: string | null;
+  network?: Network;
 }): Promise<{ isValid: boolean; reason?: string }> {
   if (!signatureHeader || !keyIdHeader) {
     return { isValid: false, reason: 'Missing X-Circle-Signature or X-Circle-Key-Id header' };
@@ -84,8 +85,8 @@ export async function verifyCircleWebhookSignature({
   }
 
   try {
-    // 1. Fetch DER-encoded public key from Circle v2 API
-    const publicKeyBase64 = await getCirclePublicKeyDer(keyIdHeader);
+    // 1. Fetch DER-encoded public key from Circle v2 API using network credentials
+    const publicKeyBase64 = await getCirclePublicKeyDer(keyIdHeader, network);
 
     // 2. Parse DER SPKI key
     const publicKeyDer = Buffer.from(publicKeyBase64, 'base64');
@@ -109,6 +110,6 @@ export async function verifyCircleWebhookSignature({
 
     return { isValid };
   } catch (error: any) {
-    return { isValid: false, reason: `ECDSA signature verification error: ${error.message || error}` };
+    return { isValid: false, reason: `ECDSA signature verification error on ${network}: ${error.message || error}` };
   }
 }

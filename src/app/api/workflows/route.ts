@@ -4,8 +4,16 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { validateAllocationGraph } from '@/lib/validation/allocation';
+import { NetworkSchema, Network } from '@/config/network';
+import { z } from 'zod';
 
-
+const CreateWorkflowSchema = z.object({
+  name: z.string().min(1, 'Workflow name is required'),
+  nodes: z.any(),
+  edges: z.any(),
+  isActive: z.boolean().optional(),
+  network: NetworkSchema.default('mainnet'),
+});
 
 export async function GET(req: NextRequest) {
   try {
@@ -15,8 +23,26 @@ export async function GET(req: NextRequest) {
     }
 
     const userId = (session.user as any).id;
+    const { searchParams } = new URL(req.url);
+    const rawNetwork = searchParams.get('network');
+
+    let network: Network | undefined;
+    if (rawNetwork) {
+      const parsed = NetworkSchema.safeParse(rawNetwork);
+      if (!parsed.success) {
+        return NextResponse.json(
+          { error: 'Invalid network parameter. Must be "mainnet" or "testnet".' },
+          { status: 400 }
+        );
+      }
+      network = parsed.data;
+    }
+
     const workflows = await prisma.workflow.findMany({
-      where: { userId },
+      where: {
+        userId,
+        ...(network ? { network } : {}),
+      },
       include: {
         _count: {
           select: { executions: true },
@@ -42,12 +68,17 @@ export async function POST(req: NextRequest) {
     }
 
     const userId = (session.user as any).id;
-    const body = await req.json();
-    const { name, nodes, edges, isActive } = body;
+    const body = await req.json().catch(() => ({}));
 
-    if (!name || name.trim() === '') {
-      return NextResponse.json({ error: 'Workflow name is required' }, { status: 400 });
+    const parseResult = CreateWorkflowSchema.safeParse(body);
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', details: parseResult.error.flatten() },
+        { status: 400 }
+      );
     }
+
+    const { name, nodes, edges, isActive, network } = parseResult.data;
 
     // Graph-aware branch allocation validation (max 100% per branch)
     const validation = validateAllocationGraph(nodes, edges);
@@ -59,6 +90,7 @@ export async function POST(req: NextRequest) {
       data: {
         userId,
         name,
+        network,
         isActive: isActive ?? true,
         nodes: nodes || [],
         edges: edges || [],

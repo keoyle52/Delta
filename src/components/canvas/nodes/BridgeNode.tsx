@@ -5,7 +5,8 @@ import { Network } from 'lucide-react';
 import { isValidEvmAddress, isValidSolanaAddress } from '@/lib/validation/address';
 
 export default function BridgeNode({ data, selected }: { data: any; selected?: boolean }) {
-  const isSolana = (data.destinationChain || 'Base_Sepolia') === 'Solana_Devnet';
+  const destChain = data.destinationChain || 'Base';
+  const isSolana = destChain === 'Solana' || destChain === 'Solana_Devnet';
   const hasConfigError =
     !data.destinationAddress ||
     !(isSolana ? isValidSolanaAddress(data.destinationAddress) : isValidEvmAddress(data.destinationAddress));
@@ -46,10 +47,10 @@ export default function BridgeNode({ data, selected }: { data: any; selected?: b
 
       <div className="space-y-1">
         <h4 className="text-sm font-semibold text-white">
-          {data.label || `Bridge to ${data.destinationChain || 'Base_Sepolia'}`}
+          {data.label || `Bridge to ${destChain}`}
         </h4>
         <p className="text-xs text-slate-400">
-          Dest: <span className="font-mono text-blue-300">{data.destinationChain || 'Base_Sepolia'}</span>
+          Dest: <span className="font-mono text-blue-300">{destChain}</span>
         </p>
         {data.destinationAddress && (
           <p className="text-[10px] font-mono text-slate-500 truncate max-w-[190px]">

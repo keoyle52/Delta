@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { inngest } from '@/lib/inngest/client';
+import { Network, NetworkSchema } from '@/config/network';
 
 export async function POST(req: NextRequest) {
   try {
@@ -21,12 +22,36 @@ export async function POST(req: NextRequest) {
     }
 
     const userId = (session.user as any).id;
+    const { searchParams } = new URL(req.url);
+    const body = await req.json().catch(() => ({}));
+
+    const rawNetwork = searchParams.get('network') || body.network;
+    let network: Network = 'mainnet';
+
+    if (rawNetwork) {
+      const parsed = NetworkSchema.safeParse(rawNetwork);
+      if (parsed.success) {
+        network = parsed.data;
+      }
+    } else {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { activeNetwork: true },
+      });
+      network = (user?.activeNetwork as Network) || 'mainnet';
+    }
+
     const wallet = await prisma.wallet.findUnique({
-      where: { userId },
+      where: {
+        userId_network: {
+          userId,
+          network,
+        },
+      },
     });
 
     if (!wallet) {
-      return NextResponse.json({ error: 'Simulated wallet not found in database.' }, { status: 404 });
+      return NextResponse.json({ error: `Simulated wallet not found for ${network}.` }, { status: 404 });
     }
 
     const currentBal = parseFloat(wallet.simulatedUsdcBalance || '0');
@@ -40,9 +65,9 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Check for active workflows to trigger simulated execution
+    // Check for active workflows to trigger simulated execution on this network
     const userWorkflows = await prisma.workflow.findMany({
-      where: { userId, isActive: true },
+      where: { userId, isActive: true, network },
     });
 
     let triggeredCount = 0;
@@ -55,6 +80,7 @@ export async function POST(req: NextRequest) {
       const execution = await prisma.execution.create({
         data: {
           workflowId: workflow.id,
+          network,
           triggerTxHash: txHash,
           triggerAmount: '20.00',
           status: 'RUNNING',
@@ -65,7 +91,7 @@ export async function POST(req: NextRequest) {
               nodeName: triggerNode?.data?.label || 'USDC Received',
               status: 'COMPLETE',
               txHash,
-              details: 'Triggered by simulated deposit of 20.00 USDC',
+              details: `Triggered by simulated deposit of 20.00 USDC on ${network === 'mainnet' ? 'Arc Mainnet' : 'Arc Testnet'}`,
               timestamp: new Date().toISOString(),
               simulated: true,
             },
@@ -79,6 +105,7 @@ export async function POST(req: NextRequest) {
         data: {
           executionId: execution.id,
           workflowId: workflow.id,
+          network,
           triggerTxHash: txHash,
           triggerAmount: '20.00',
           walletAddress: wallet.address,
@@ -92,7 +119,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: 'Simulated 20 USDC deposit credited successfully.',
+      network,
+      message: `Simulated 20 USDC deposit credited successfully on ${network}.`,
       newBalance: newBalStr,
       triggeredWorkflows: triggeredCount,
     });

@@ -16,10 +16,12 @@ import {
   ChevronRight,
   ShieldCheck,
 } from 'lucide-react';
+import { useNetwork } from '@/context/NetworkContext';
 
 export default function ExecutionsPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const workflowId = resolvedParams.id;
+  const { network, isMainnet, config } = useNetwork();
 
   const [executions, setExecutions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,27 +65,42 @@ export default function ExecutionsPage({ params }: { params: Promise<{ id: strin
   };
 
   const getExplorerLink = (nodeType: string, txHash?: string, destinationChain?: string) => {
-    if (!txHash || txHash.startsWith('0x-manual') || txHash.startsWith('0x-webhook')) return null;
+    if (!txHash || txHash.startsWith('0x-manual') || txHash.startsWith('0x-webhook') || txHash.startsWith('0xsim-')) return null;
 
-    const chain = destinationChain || (txHash.startsWith('0x') ? 'Arc_Testnet' : 'Solana_Devnet');
+    const chain = destinationChain || (txHash.startsWith('0x') ? config.appKitChain : config.appKitSolanaChain);
 
     switch (chain) {
+      case 'Arc':
       case 'Arc_Testnet':
-        return `https://testnet.arcscan.app/tx/${txHash}`;
-      case 'Ethereum_Sepolia':
-        return `https://sepolia.etherscan.io/tx/${txHash}`;
-      case 'Base_Sepolia':
-        return `https://sepolia.basescan.org/tx/${txHash}`;
-      case 'Arbitrum_Sepolia':
-        return `https://sepolia.arbiscan.io/tx/${txHash}`;
-      case 'Optimism_Sepolia':
-        return `https://sepolia-optimism.etherscan.io/tx/${txHash}`;
-      case 'Polygon_Amoy_Testnet':
-        return `https://amoy.polygonscan.com/tx/${txHash}`;
-      case 'Avalanche_Fuji':
-        return `https://testnet.snowtrace.io/tx/${txHash}`;
+        return `${config.explorerBaseUrl}/tx/${txHash}`;
+      case 'Solana':
+        return `https://explorer.solana.com/tx/${txHash}`;
       case 'Solana_Devnet':
         return `https://explorer.solana.com/tx/${txHash}?cluster=devnet`;
+      case 'Base':
+        return `https://basescan.org/tx/${txHash}`;
+      case 'Base_Sepolia':
+        return `https://sepolia.basescan.org/tx/${txHash}`;
+      case 'Ethereum':
+        return `https://etherscan.io/tx/${txHash}`;
+      case 'Ethereum_Sepolia':
+        return `https://sepolia.etherscan.io/tx/${txHash}`;
+      case 'Arbitrum':
+        return `https://arbiscan.io/tx/${txHash}`;
+      case 'Arbitrum_Sepolia':
+        return `https://sepolia.arbiscan.io/tx/${txHash}`;
+      case 'Optimism':
+        return `https://optimistic.etherscan.io/tx/${txHash}`;
+      case 'Optimism_Sepolia':
+        return `https://sepolia-optimism.etherscan.io/tx/${txHash}`;
+      case 'Polygon':
+        return `https://polygonscan.com/tx/${txHash}`;
+      case 'Polygon_Amoy_Testnet':
+        return `https://amoy.polygonscan.com/tx/${txHash}`;
+      case 'Avalanche':
+        return `https://snowtrace.io/tx/${txHash}`;
+      case 'Avalanche_Fuji':
+        return `https://testnet.snowtrace.io/tx/${txHash}`;
       case 'Sonic_Testnet':
         return `https://user-spicynet.soniclabs.com/tx/${txHash}`;
       case 'Sei_Testnet':
@@ -94,9 +111,11 @@ export default function ExecutionsPage({ params }: { params: Promise<{ id: strin
         return `https://worldchain-sepolia.explorer.alchemy.com/tx/${txHash}`;
       default:
         if (txHash.startsWith('0x')) {
-          return `https://testnet.arcscan.app/tx/${txHash}`;
+          return `${config.explorerBaseUrl}/tx/${txHash}`;
         }
-        return `https://explorer.solana.com/tx/${txHash}?cluster=devnet`;
+        return isMainnet
+          ? `https://explorer.solana.com/tx/${txHash}`
+          : `https://explorer.solana.com/tx/${txHash}?cluster=devnet`;
     }
   };
 
